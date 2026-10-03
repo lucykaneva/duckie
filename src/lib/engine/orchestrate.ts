@@ -15,6 +15,7 @@ import {
   detectClarification,
   detectKeepGoing,
   detectMoveOn,
+  detectAskingQuestion,
   detectQuestion,
   detectWrapUpRequest,
   plantedAgreementQuote,
@@ -97,6 +98,8 @@ export function needsJudge(run: SessionRun, text: string): boolean {
   // "What do you mean?" and a question in reply to a check-in: the engine repeats itself, nothing to judge.
   if (detectClarification(text)) return false;
   if (run.pending !== null && detectQuestion(text)) return false;
+  // A question means "help me": the engine gives a hint and scores nothing, so there is nothing to judge.
+  if (detectAskingQuestion(text)) return false;
   if (run.pausedAtMs !== null && short) return false;
   return true;
 }

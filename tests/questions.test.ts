@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { SEED_CONCEPTS } from "../src/lib/db/seed-data";
 import { needsJudge } from "../src/lib/engine/orchestrate";
-import { detectClarification, detectQuestion } from "../src/lib/engine/signals";
+import { detectAskingQuestion, detectClarification, detectQuestion } from "../src/lib/engine/signals";
 import { emptyJudgeResult } from "../src/lib/engine/stub-judge";
 import { freshSession, processTurn, type ConceptDef, type SessionRun } from "../src/lib/engine/turn";
 import {
@@ -154,5 +154,61 @@ describe("'What do you mean by pebbles?'", () => {
   it("still treats 'I don't know' as a real struggle", () => {
     const out = turn(afterFirstQuestion(), "I don't know");
     expect(out.signals).toContain("dontKnow");
+  });
+});
+
+describe("a question means the student needs help", () => {
+  function midConcept(): SessionRun {
+    const run = freshSession(defs);
+    const c = run.concepts.find((x) => x.conceptId === "c_12")!;
+    c.levelReached = "L1";
+    c.moves = 1;
+    return { ...run, turnCount: 2, focusConceptId: "c_12", lastMoveKind: "question", lastLine: "Where would you start?" };
+  }
+
+  it("tells a real question from an explanation that ends in 'right?'", () => {
+    for (const text of ["Is it log n?", "Why does that work", "How would that go with 9 numbers?"]) {
+      expect(detectAskingQuestion(text), text).toBe(true);
+    }
+    for (const text of [
+      "You halve the list each time, right?",
+      "What's left is the right half so you search that and keep halving until you find it, okay?",
+      "Is it log n? Is it n squared?",
+      "What do you mean by pebbles?", // that is a clarification, handled separately
+      "Keep going",
+    ]) {
+      expect(detectAskingQuestion(text), text).toBe(false);
+    }
+  });
+
+  it("gives a hint (L3) on the idea in focus, and scores nothing", () => {
+    const out = turn(midConcept(), "Is it log n?");
+    expect(out.move.level).toBe("L3");
+    expect(out.move.conceptId).toBe("c_12");
+    expect(out.signals).toEqual([]);
+    expect(out.resolved).toEqual([]);
+    const c = out.session.concepts.find((x) => x.conceptId === "c_12")!;
+    expect(c.score).toBe(0);
+    expect(c.failedAttempts).toBe(0); // asking for help is not an attempt
+    expect(out.session.closing).toBe(false);
+  });
+
+  it("does not spend a Grok call on it", () => {
+    expect(needsJudge(midConcept(), "Is it log n?")).toBe(false);
+  });
+
+  it("gives a hint, not 'ready to wrap up', when it was asked mid-wrap-up with an idea still open", () => {
+    const run = { ...midConcept(), pending: "check_in" as const, lastMoveKind: "check_in" as const, lastLine: CHECK_IN_LINE };
+    const out = turn(run, "Wait, how does that work?");
+    expect(out.move.level).toBe("L3");
+    expect(out.move.kind).not.toBe("wrap_up");
+    expect(out.session.pending).toBeNull(); // the question answered the check-in
+    expect(out.session.closing).toBe(false);
+  });
+
+  it("asks for their guess when there is nothing open to help with", () => {
+    const out = turn(proposalPending(), "Is it log three of one million?");
+    expect(out.move.line).toBe(ASK_AGAIN_PROPOSAL_LINE);
+    expect(out.move.line).toMatch(/guess/);
   });
 });
