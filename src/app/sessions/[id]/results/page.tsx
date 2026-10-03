@@ -9,6 +9,7 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
+import { DuckInsights } from "@/components/DuckInsights";
 import { GapChart } from "@/components/results/GapChart";
 import {
   ConceptResultCard,
@@ -74,7 +75,7 @@ export default function SessionResultsPage() {
       .sort()[0];
     const when = formatRecallDay(earliest);
     const count = results.recall.length;
-    return `duckie ask about ${count} ${count === 1 ? "concept" : "concepts"} again on ${when}.`;
+    return `Duckie will ask about ${count} ${count === 1 ? "concept" : "concepts"} again on ${when}.`;
   }, [results]);
 
   return (
@@ -174,20 +175,25 @@ export default function SessionResultsPage() {
             </ul>
           </section>
 
-          {recallLine ? (
-            <section className="mt-12 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-body">{recallLine}</p>
-              <ButtonLink href="/review" variant="ghost">
-                See all
+          <section className="mt-12">
+            <h2 className="text-label">Next time</h2>
+            {recallLine ? (
+              <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-body">{recallLine}</p>
+                <ButtonLink href="/review" variant="ghost">
+                  See all
+                </ButtonLink>
+              </div>
+            ) : null}
+            <div className="mt-8">
+              <DuckInsights items={results.insights ?? []} showOnlyNew />
+            </div>
+            <div className="mt-8">
+              <ButtonLink href={`/sessions/${results.sessionId}/log`} variant="ghost">
+                Decision log
               </ButtonLink>
-            </section>
-          ) : null}
-
-          <div className="mt-12">
-            <ButtonLink href={`/sessions/${results.sessionId}/log`} variant="ghost">
-              Decision log
-            </ButtonLink>
-          </div>
+            </div>
+          </section>
         </>
       ) : null}
     </main>

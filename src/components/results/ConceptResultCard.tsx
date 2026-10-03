@@ -37,7 +37,7 @@ const STATE_EDGE: Record<ConceptState, string> = {
   not_yet: "bg-state-grey-fg",
 };
 
-const STATE_DOT: Record<ConceptState, string> = {
+export const STATE_DOT: Record<ConceptState, string> = {
   owned: "bg-state-green-fg",
   assisted: "bg-state-yellow-fg",
   explained_to: "bg-state-red-fg",

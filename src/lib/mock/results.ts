@@ -1,4 +1,5 @@
 import type { SessionResults } from "@/lib/duck/types";
+import { MOCK_INSIGHTS } from "./profile";
 
 /** Rich Binary search debrief used by ?mock=1 and when the results request fails. */
 export const MOCK_RESULTS: SessionResults = {
@@ -53,7 +54,9 @@ export const MOCK_RESULTS: SessionResults = {
   ],
   duckLearned: [
     'You skip the update step unless asked (turn 7: "I think that\'s fine?")',
+    'You reach for a smaller example when stuck (turn 11: "Can we try it with just four numbers?")',
   ],
+  insights: MOCK_INSIGHTS.map((item) => ({ ...item })),
   recall: [
     { conceptId: "c_14", due: "2026-10-05" },
     { conceptId: "c_15", due: "2026-10-05" },

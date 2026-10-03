@@ -4,7 +4,7 @@ import { ExtractError, errorResponse } from "@/lib/extract/errors";
 import { checkPageImage, mimeFor } from "@/lib/extract/files";
 import { transcribePage } from "@/lib/extract/grok";
 
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 /**
  * Send one scanned page as the raw request body (Content-Type image/jpeg, about 1200px wide).

@@ -1,5 +1,5 @@
 .page {
-  --bg: #f1f0ec;
+  --bg: var(--color-bg);
   --ink: #1d1d1f;
   --ink-quiet: #5c5b57;
   width: 100%;
@@ -25,6 +25,7 @@
 .stage canvas {
   position: absolute;
   inset: 0;
+  z-index: 0;
   width: 100%;
   height: 100%;
   display: block;
@@ -32,7 +33,7 @@
 
 .copy {
   position: absolute;
-  z-index: 1;
+  z-index: 2;
   left: clamp(16px, 7vw, 120px);
   top: 50%;
   transform: translateY(-50%);

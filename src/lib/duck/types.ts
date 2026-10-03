@@ -94,6 +94,8 @@ export interface SessionResults {
   concepts: ResultsConcept[];
   duckLearned: string[];
   recall: { conceptId: string; due: string }[];
+  /** TODO(Dev B): add insights to the results contract. */
+  insights?: DuckInsight[];
 }
 
 export interface Course {
@@ -177,6 +179,27 @@ export interface SessionLog {
   turns: DecisionLogRow[];
 }
 
+export type InsightValence = "strength" | "watch_out";
+
+/**
+ * TODO(Dev B): add this shape to GET /api/profile (and results).
+ * Quotes must come from student turns only.
+ */
+export interface DuckInsight {
+  id: string;
+  valence: InsightValence;
+  noticed: string;
+  duckPrompt?: string;
+  quote?: string;
+  evidenceText?: string;
+  topic: string;
+  date: string;
+  turn: number;
+  sessionId: string;
+  adaptation: string;
+  isNew?: boolean;
+}
+
 export interface Profile {
   userId: string;
   calibration: string;
@@ -187,6 +210,10 @@ export interface Profile {
   configOverrides: Partial<DuckConfig>;
   duckLearned: string[];
   updatedAt: string;
+  /** TODO(Dev B): session count on the profile contract. */
+  sessionCount?: number;
+  /** TODO(Dev B): replace duckLearned strings with this list. */
+  insights?: DuckInsight[];
 }
 
 // Dev A implements. Returns structure only, never speech. A quote must appear verbatim in the turn text or the item is dropped.

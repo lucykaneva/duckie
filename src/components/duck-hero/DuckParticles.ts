@@ -242,7 +242,9 @@ export class DuckParticles {
 
     const wide = w > 900;
     // Duck sits right of the headline on wide screens, centered on narrow ones.
-    this.scale = wide ? Math.min(h * 0.78, w * 0.48) : Math.min(h * 0.55, w * 0.9);
+    // 4/3 keeps the current composition and just grows the bird by a third.
+    const grow = 4 / 3;
+    this.scale = (wide ? Math.min(h * 0.78, w * 0.48) : Math.min(h * 0.55, w * 0.9)) * grow;
     this.center = wide ? { x: w * 0.23, y: 0 } : { x: 0, y: -h * 0.12 };
 
     const u = this.material.uniforms;

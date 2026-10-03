@@ -70,14 +70,28 @@ const EYE_SCALE = 0.82;
 const EYE_WOBBLE = 0.02;
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-const rand = (a: number, b: number) => lerp(a, b, Math.random());
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const smoothstep = (a: number, b: number, v: number) => {
   const t = clamp01((v - a) / (b - a));
   return t * t * (3 - 2 * t);
 };
+
+/** Mulberry32. Used when a sample needs the same particles every time (review ducks). */
+function mulberry32(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+let random = Math.random;
+const rand = (a: number, b: number) => lerp(a, b, random());
 const jitter = (c: RGB, amount: number): RGB => {
-  const v = 1 + (Math.random() - 0.5) * amount;
+  const v = 1 + (random() - 0.5) * amount;
   return c.map((ch) => Math.min(1, ch * v)) as RGB;
 };
 
@@ -99,7 +113,7 @@ function rgbInfo(r: number, g: number, b: number): PixelInfo {
 
 /** Smooth 2D value noise in 0..1. */
 function makeNoise() {
-  const seed = (Math.random() * 2 ** 31) | 0;
+  const seed = (random() * 2 ** 31) | 0;
   const hash = (ix: number, iy: number) => {
     let n = (Math.imul(ix, 374761393) + Math.imul(iy, 668265263) + seed) | 0;
     n = Math.imul(n ^ (n >>> 13), 1274126177);
@@ -174,8 +188,16 @@ function boxFraction(src: Uint8Array, w: number, h: number) {
  */
 export function samplePixels(
   img: HTMLImageElement,
-  { resolution = 420, alphaThreshold = 110, keyTolerance = 42 } = {},
+  { resolution = 420, alphaThreshold = 110, keyTolerance = 42, seed }: {
+    resolution?: number;
+    alphaThreshold?: number;
+    keyTolerance?: number;
+    /** When set, placement is deterministic so every review card shares one duck. */
+    seed?: number;
+  } = {},
 ): ParticleSample {
+  const previous = random;
+  random = seed == null ? Math.random : mulberry32(seed);
   const scale = resolution / Math.max(img.naturalWidth, img.naturalHeight);
   const w = Math.max(1, Math.round(img.naturalWidth * scale));
   const h = Math.max(1, Math.round(img.naturalHeight * scale));
@@ -367,7 +389,7 @@ export function samplePixels(
   mouthY = mouthN ? mouthY / mouthN : minY + bh * 0.35;
 
   const pick = (light: number, darkShare: number): RGB => {
-    const r = Math.random();
+    const r = random();
     return jitter(r < light ? PALETTE.light : r < light + darkShare ? PALETTE.dark : PALETTE.primary, 0.04);
   };
   const colorFor = (l: number, p: number, y: number): RGB => {
@@ -467,11 +489,11 @@ export function samplePixels(
     const band = BANDS[b];
     let placed = 0;
     for (let a = 0; a < target * 40 && placed < target && zone.length; a++) {
-      const p = zone[(Math.random() * zone.length) | 0];
+      const p = zone[(random() * zone.length) | 0];
       const s = sd[p];
       if (s < band.minInside || (coreOnly && s < CORE)) continue;
-      let x = (p % w) + Math.random();
-      let y = ((p / w) | 0) + Math.random();
+      let x = (p % w) + random();
+      let y = ((p / w) | 0) + random();
       const l = labelAt(p);
       const rx = (x - minX) / bw, ry = (y - minY) / bh;
       const detail = l === BEAK || featureDist[p] < 9 || beakDist[p] < 7 || (rx > 0.92 && ry < 0.45);
@@ -485,7 +507,7 @@ export function samplePixels(
       const sn = s + wobble(x, y) * lerp(0.5, 1.3, dis);
       let keep = edgeKeep(sn, dis) * clusterKeep(b, c);
       if (b === TINY && core) keep *= 0.15;
-      if (Math.random() > keep) continue;
+      if (random() > keep) continue;
 
       const [lo, hi] = b === MEDIUM && (detail || s < 6) ? [3, 3.9] : band.d;
       const dpx = rand(lo, hi) * rand(0.88, 1.12);
@@ -499,7 +521,7 @@ export function samplePixels(
 
       const base = sn >= 6 ? rand(0.93, 1) : sn >= 0 ? rand(0.85, 1) : sn >= -6 ? rand(0.6, 0.9) : rand(0.3, 0.55);
       const alpha = Math.min(1, base * rand(0.9, 1.08));
-      const exc = s < 4 && s > -6 && Math.random() < 0.035 ? [rand(6, 16), rand(12, 24), Math.random()] : noExcursion;
+      const exc = s < 4 && s > -6 && random() < 0.035 ? [rand(6, 16), rand(12, 24), random()] : noExcursion;
       grid[gy(y) * gw + gx(x)].push(X.length);
       add(x, y, dpx, colorFor(l, p, y), alpha, nrm, exc);
       placed++;
@@ -521,15 +543,15 @@ export function samplePixels(
   const feature = (pixels: number[], d: [number, number], coverage: number, alpha: [number, number], color: () => RGB, k = 1) => {
     const count = Math.round((pixels.length * k * k * PX * PX * coverage) / discArea(d));
     for (let i = 0; i < count; i++) {
-      const p = pixels[(Math.random() * pixels.length) | 0];
-      const x = ecx + ((p % w) + Math.random() - ecx) * k;
-      const y = ecy + (((p / w) | 0) + Math.random() - ecy) * k;
+      const p = pixels[(random() * pixels.length) | 0];
+      const x = ecx + ((p % w) + random() - ecx) * k;
+      const y = ecy + (((p / w) | 0) + random() - ecy) * k;
       add(x, y, rand(...d), color(), rand(...alpha), [0, 0], noExcursion);
     }
   };
   const mouthPixels: number[] = [];
   for (let p = 0; p < n; p++) if (label[p] === MOUTH) mouthPixels.push(p);
-  feature(mouthPixels, [1.8, 2.8], 0.9, [0.65, 0.88], () => jitter(Math.random() < 0.8 ? PALETTE.burnt : PALETTE.beakShadow, 0.05));
+  feature(mouthPixels, [1.8, 2.8], 0.9, [0.65, 0.88], () => jitter(random() < 0.8 ? PALETTE.burnt : PALETTE.beakShadow, 0.05));
 
   if (eyeN) {
     const eyeNoise = makeNoise();
@@ -543,7 +565,7 @@ export function samplePixels(
       if (m >= 1) continue;
       // A softer rim instead of a hard-edged disc.
       const rim = m > 0.85;
-      if (rim && Math.random() < 0.15) continue;
+      if (rim && random() < 0.15) continue;
       add(x, y, rand(...d) * (rim ? 0.9 : 1), jitter(PALETTE.eye, 0.06), rim ? rand(0.8, 0.95) : rand(0.95, 1), [0, 0], noExcursion);
       placed++;
     }
@@ -557,6 +579,7 @@ export function samplePixels(
     targets[i * 2 + 1] = (h / 2 - Y[i]) * norm;
   }
 
+  random = previous;
   return {
     targets,
     colors: new Float32Array(out.colors),

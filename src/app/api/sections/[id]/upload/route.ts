@@ -7,7 +7,7 @@ import { transcribePage } from "@/lib/extract/grok";
 import { readPdfPages } from "@/lib/extract/pages";
 
 // Extraction runs after the response, so give the function room to finish.
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 const SEND_AS_FORM = "Send the file as multipart form data in a field named 'file'.";
 

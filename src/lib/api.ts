@@ -2,6 +2,7 @@ import type {
   Concept,
   Course,
   DuckMove,
+  DueRecall,
   Profile,
   SessionLog,
   Section,
@@ -10,6 +11,50 @@ import type {
   SessionStart,
   UploadJob,
 } from "@/lib/duck/types";
+import { MOCK_PROFILE } from "@/lib/mock/profile";
+import { MOCK_REVIEW_DUE } from "@/lib/mock/review";
+
+export type DuckLearnedItem = {
+  line: string;
+  quote?: string;
+  turn?: number;
+};
+
+const TURN_TAIL = /\s*\(turn\s+(\d+):\s*[“"](.+?)[”"]\)\s*$/i;
+
+export function normalizeDuckLearned(raw: unknown): DuckLearnedItem[] {
+  if (!Array.isArray(raw)) return [];
+
+  const items: DuckLearnedItem[] = [];
+  for (const entry of raw) {
+    if (typeof entry === "string") {
+      const text = entry.trim();
+      if (!text) continue;
+      const match = text.match(TURN_TAIL);
+      if (match) {
+        items.push({
+          line: text.slice(0, match.index).trim(),
+          turn: Number(match[1]),
+          quote: match[2],
+        });
+      } else {
+        items.push({ line: text });
+      }
+      continue;
+    }
+
+    if (entry && typeof entry === "object") {
+      const record = entry as { line?: unknown; quote?: unknown; turn?: unknown };
+      if (typeof record.line !== "string" || !record.line.trim()) continue;
+      items.push({
+        line: record.line.trim(),
+        quote: typeof record.quote === "string" ? record.quote : undefined,
+        turn: typeof record.turn === "number" ? record.turn : undefined,
+      });
+    }
+  }
+  return items;
+}
 
 export type UploadStatus = UploadJob;
 
@@ -269,13 +314,63 @@ export async function getResults(sessionId: string): Promise<SessionResults> {
   );
 }
 
-export async function getProfile(): Promise<Profile> {
-  return request<Profile>("/api/profile", "load the profile");
-}
-
 export async function getSessionLog(sessionId: string): Promise<SessionLog> {
   return request<SessionLog>(
     `/api/sessions/${encodeURIComponent(sessionId)}/log`,
     "load the decision log",
   );
+}
+
+export async function getReviewDue(options?: { mock?: boolean }): Promise<DueRecall[]> {
+  if (options?.mock) return MOCK_REVIEW_DUE.map((item) => ({ ...item }));
+
+  try {
+    const list = await request<DueRecall[]>("/api/review/due", "load review");
+    if (!Array.isArray(list)) {
+      throw new Error("Couldn't load review. The response wasn't a list.");
+    }
+    return list;
+  } catch {
+    // TODO: remove this fallback once GET /api/review/due is reliable.
+    return MOCK_REVIEW_DUE.map((item) => ({ ...item }));
+  }
+}
+
+function cloneProfile(profile: Profile): Profile {
+  return {
+    ...profile,
+    duckLearned: [...profile.duckLearned],
+    teachingHabits: [...profile.teachingHabits],
+    insights: profile.insights?.map((item) => ({ ...item })),
+  };
+}
+
+export async function getProfile(options?: { mock?: boolean }): Promise<Profile> {
+  const path = options?.mock ? "/api/profile?mock=1" : "/api/profile";
+  try {
+    const data = await request<Profile>(path, "load the profile");
+    if (data.insights && data.insights.length > 0) return data;
+  } catch {
+    // The live stub does not yet return insights.
+  }
+
+  // TODO: remove this fixture once GET /api/profile?mock=1 returns sessionCount and insights.
+  return cloneProfile(MOCK_PROFILE);
+}
+
+export async function dismissProfileItem(itemId: string): Promise<void> {
+  // TODO(Dev B): add POST /api/profile/dismiss { itemId }. Stubbed as 200.
+  void fetch("/api/profile/dismiss", {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ itemId }),
+  }).catch(() => {});
+}
+
+export async function resetProfile(): Promise<void> {
+  // TODO(Dev B): add POST /api/profile/reset. Stubbed as 200.
+  void fetch("/api/profile/reset", {
+    method: "POST",
+    headers: { Accept: "application/json" },
+  }).catch(() => {});
 }

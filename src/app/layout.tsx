@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Fredoka, Geist } from "next/font/google";
+import { AppHeader } from "@/components/AppHeader";
+import { GlassCursor } from "@/components/GlassCursor";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,7 +16,7 @@ const fredoka = Fredoka({
 });
 
 export const metadata: Metadata = {
-  title: "Study with Duckie",
+  title: "quack",
   description: "Teach a duck out loud and find out what you actually understand.",
 };
 
@@ -24,7 +26,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${fredoka.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <AppHeader />
+        {children}
+        <GlassCursor />
+      </body>
     </html>
   );
 }

@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import DuckHero from "@/components/duck-hero/DuckHero";
 
 export default function Home() {
-  redirect("/courses");
+  return <DuckHero />;
 }
