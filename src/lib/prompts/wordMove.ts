@@ -26,6 +26,11 @@ export interface WordMoveInput {
   /** What is going on in the session. Grok adapts to this instead of reciting a script. */
   situation?: string;
   lastDuckLine?: string;
+  /**
+   * Code found a wrong claim or a wrong trace in what the student just said. The duck then asks why they think
+   * that and adds a small hint (L1 to L3). Code decides this; Grok never judges right or wrong.
+   */
+  studentWas?: "wrong";
 }
 
 export interface WordMoveOptions {
@@ -56,7 +61,7 @@ type Worded = {
  * `open` is worded after the student has spoken, so a hello gets a hello back, not a quiz.
  */
 export function isWorded({ kind, level }: Worded): boolean {
-  if (kind === "celebrate" || kind === "open") return true;
+  if (kind === "celebrate" || kind === "open" || kind === "reinforce") return true;
   return (kind === "question" || kind === "rephrase") && level !== "L0";
 }
 
@@ -84,7 +89,7 @@ export function slidesUnavailable(studentWords: string): boolean {
 /** Returns a plain-English reason the line is not allowed, or null if it is fine. */
 export function lineProblem(
   line: string,
-  input: Pick<WordMoveInput, "kind" | "level" | "slide"> & { noSlides?: boolean },
+  input: Pick<WordMoveInput, "kind" | "level" | "slide" | "studentWas"> & { noSlides?: boolean },
 ): string | null {
   const text = line.trim();
   if (!text) return "the line was empty";
@@ -99,18 +104,35 @@ export function lineProblem(
   if ((input.kind === "celebrate" || input.kind === "wrap_up") && questions > 0) {
     return input.kind === "wrap_up" ? "a wrap-up must not ask a question" : "a celebration must not ask a question";
   }
-  if (input.kind !== "celebrate" && input.level === "L4" && questions !== 1) {
+  if (input.kind === "reinforce" && questions !== 1) {
+    return "it must end by asking the student to say it back, as one question";
+  }
+  if (input.kind !== "celebrate" && input.kind !== "reinforce" && input.level === "L4" && questions !== 1) {
     return "an explanation must end by asking the student to say it back, as one question";
   }
   if (input.noSlides && /\bslides?\b/i.test(text)) {
     return "the student said they cannot see the slides, so do not mention slides";
   }
-  if (input.kind !== "celebrate" && input.level === "L2" && input.slide !== undefined && !input.noSlides) {
+  if (
+    input.kind !== "celebrate" &&
+    input.kind !== "reinforce" &&
+    input.level === "L2" &&
+    input.slide !== undefined &&
+    !input.noSlides
+  ) {
     if (!new RegExp(`\\bslide\\s*${input.slide}\\b`, "i").test(text)) return `it must name slide ${input.slide}`;
   }
   // Spoken questions need the question mark so the voice rises at the end.
   if ((input.kind === "question" || input.kind === "rephrase") && (input.level === "L1" || input.level === "L2")) {
     if (questions !== 1) return "it must be a question and end with a question mark";
+  }
+  if (
+    (input.kind === "question" || input.kind === "rephrase") &&
+    input.studentWas === "wrong" &&
+    input.level !== "L4" &&
+    questions !== 1
+  ) {
+    return "it must ask why they think that, as one question with a question mark";
   }
   return null;
 }
@@ -151,7 +173,7 @@ const SYSTEM_PROMPT = `You write the one line a toy duck says out loud. The duck
 You are in a live conversation. Read the situation and what the student just said, then continue that conversation. The rules engine only picked the kind of move (invite, curious question, celebration). You choose words that fit THIS turn. Do not recite a quiz script or a canned line.
 
 Hard limits:
-- ${DUCK.maxDuckWords} words or fewer. At most one question mark. Plain spoken English: no lists, no markdown, no emoji, and no quotation marks around the line.
+- ${DUCK.maxDuckWords} words or fewer. At most one question mark. Normal punctuation (commas and full stops). Plain spoken English: no lists, no markdown, no emoji, and no quotation marks around the line.
 - Never state the answer to anything. Never explain anything unless the task says to.
 - Reply to the student you just heard. Reuse their words. The intent line is a backup meaning, not words to copy.
 - Do not add facts, numbers or claims that are in neither the situation nor the student's words.
@@ -166,6 +188,18 @@ function taskFor(input: WordMoveInput): string {
   }
   if (input.kind === "celebrate") {
     return "Praise the student once, and name specifically what they just did. Keep it short and do not ask a question.";
+  }
+  if (input.kind === "reinforce") {
+    return "The student just got this right. Say so in a few words using their own words, add one small hint that points at the key part of what THEY said or at the concept name (a nudge about what to hold on to, never a new fact or a full explanation), then ask them to say it back in their own words. End with that one question.";
+  }
+  if (input.studentWas === "wrong" && input.level !== "L4" && input.level !== "L0") {
+    const hint =
+      input.level === "L2" && !noSlides
+        ? `Name slide ${input.slide ?? "the slide"} as the hint.`
+        : input.level === "L3"
+          ? "The hint is one tiny example with different small values, with no result."
+          : "The hint is a small nudge about what to look at.";
+    return `The student just said something that is not right. Start by asking, with real curiosity and no judgement, why they think that (for example "Oh, why do you think that?"). Then add one small hint. ${hint} Never say it is wrong and never give the right answer. Exactly one question mark.${input.kind === "rephrase" ? " Say it in different words than last time." : ""}`;
   }
   if (input.kind === "wrap_up") {
     return "One spoken sentence. If they taught something, name that and the one idea to revisit. If they did not teach, do not pretend they found a concept. Do not say I found. Do not quiz or ask a question.";

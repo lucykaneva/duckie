@@ -17,6 +17,8 @@ export type MoveKind =
   | "rephrase"
   | "ack"
   | "celebrate"
+  /** After a correct answer: confirm it, add one small hint, and ask the student to say it back. */
+  | "reinforce"
   | "offer_skip"
   | "check_in"
   | "pause"

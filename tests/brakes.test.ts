@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DUCK } from "../src/lib/duck/config";
+import { DUCK, ENGINE } from "../src/lib/duck/config";
 import type { JudgeResult } from "../src/lib/duck/types";
 import { SEED_CONCEPTS } from "../src/lib/db/seed-data";
 import { feedbackFor } from "../src/lib/engine/celebration";
@@ -28,6 +28,10 @@ import {
   celebrationLine,
   wordCount,
 } from "../src/lib/engine/wording";
+
+// These tests cover the ladder and brakes with the plain "Got it, next question" flow (the spec's worked example).
+// The reinforce step after a correct answer has its own tests in reinforce.test.ts.
+ENGINE.reinforceAfterCorrect = false;
 
 const MIN = 60_000;
 
