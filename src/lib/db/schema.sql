@@ -23,7 +23,22 @@ CREATE TABLE documents (
   section_id TEXT NOT NULL REFERENCES sections (id),
   filename TEXT NOT NULL,
   raw_text TEXT,
-  page_count INTEGER
+  page_count INTEGER,
+  -- awaiting_pages (image pages still being transcribed), extracting, ready, error
+  status TEXT NOT NULL DEFAULT 'awaiting_pages'
+    CHECK (status IN ('awaiting_pages', 'extracting', 'ready', 'error')),
+  error TEXT,
+  status_changed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- One row per page. text is NULL while an image page waits for its transcription.
+CREATE TABLE document_pages (
+  document_id TEXT NOT NULL REFERENCES documents (id) ON DELETE CASCADE,
+  page INTEGER NOT NULL,
+  source TEXT NOT NULL CHECK (source IN ('text', 'vision')),
+  text TEXT,
+  PRIMARY KEY (document_id, page)
 );
 
 CREATE TABLE concepts (

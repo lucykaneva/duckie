@@ -206,7 +206,9 @@ Dev B owns this and locks it tonight. All routes are Next.js API routes under `/
 | --- | --- | --- |
 | `GET /api/courses`, `POST /api/courses` | List or create courses | Frontend |
 | `POST /api/courses/:id/sections` | Create a section `{name, type: "test" or "project"}` | Frontend |
-| `POST /api/sections/:id/upload` | Upload files, parse and extract concepts (async, poll status) | Frontend |
+| `POST /api/sections/:id/upload` | Upload a PDF or a photo, parse and extract concepts (async). Scanned pages come back in `imagePagesPending` | Frontend |
+| `POST /api/documents/:id/pages/:n` | Send one scanned page as a JPEG (see the B8 note) | Frontend |
+| `GET /api/sections/:id/upload` | Poll upload status: `processing`, `ready` with the concepts, or `error` with a message | Frontend |
 | `GET /api/sections/:id/concepts` | Concept list with misconceptions and slide tags (no answers) | Frontend, Dev A |
 | `POST /api/sessions` | Start `{sectionId, topic, confidence}`. Returns the session and the opening move | Frontend, Dev A |
 | `POST /api/sessions/:id/turn` | One finished student turn `{text, startedAt, endedAt, silenceBeforeMs}`. Returns the next move | Dev A |
@@ -374,9 +376,38 @@ Each task has an ID (A for Dev A, B for Dev B, D for the designer), a time slot,
 
 **Phase 2 (1pm to 6pm): extraction, brakes, trace questions**
 
-- [ ] **B8 · 1:00 to 2:30 · Real upload and extraction.** pdf-parse (keep page numbers) then Grok: per topic the concepts, misconceptions, slide tags, concept kind, a trace or prediction question with reference code and expected answer where it fits, and fallback lines for L1 to L4 (L4 is a two-sentence explanation ending in a teach-back question). Store the reference code and answer only in `concept_secrets`. *Done when:* the binary search slides produce a list close to the seed, and a bad PDF returns a clear error.
+- [ ] **B8 · 1:00 to 2:30 · Real upload and extraction.** pdf-parse page by page (keep page numbers); a page with almost no text is a scanned or handwritten page and goes through Grok vision first (see the B8 note below this list); then Grok: per topic the concepts, misconceptions, slide tags, concept kind, a trace or prediction question with reference code and expected answer where it fits, and fallback lines for L1 to L4 (L4 is a two-sentence explanation ending in a teach-back question). Store the reference code and answer only in `concept_secrets`. *Done when:* the binary search slides produce a list close to the seed, a bad PDF returns a clear error, and the handwritten Lecture 3 scan produces readable text for all 5 pages.
 - [ ] **B9 · 2:30 to 4:00 · Brakes and celebration.** "Move on" skips a concept for the session, two skips trigger the keep-going check, two duck questions in a row trigger "What's the next piece of it?", silence at 8 s rephrases, 20 s offers a skip, 45 s pauses, a session proposes wrap-up at 8 minutes or 6 concepts, and celebration follows the spec's table (only when earned, once per concept, neutral after L4). Tell Dev A the 1.5 s pause after a success. *Done when:* Vitest tests cover each brake and each celebration row.
 - [ ] **B10 · 4:00 to 5:30 · Code runner and leak check.** Run the reference code to get the expected answer (or precompute it at extraction if the runner is slow), compare it with the student's committed answer (a wrong one adds 0.3), and block any duck line that contains a stored answer value until the student has committed. *Done when:* the "5 and 7" leak case from the worked example is blocked and tested, and a wrong trace raises the score by 0.3.
+
+**B8 note: how upload handles scanned and handwritten pages**
+
+A PDF parser only reads text that is already in the file, so a scan or a photo of handwriting comes back empty. B8 therefore works per page:
+
+1. **Find the pages with no text.** The server runs pdf-parse page by page. A page with fewer than 25 non-space characters (`EXTRACT.minPageChars`) is an image page. Doing it per page also handles PDFs that mix typed and scanned pages.
+2. **Draw image pages in the browser, not on Vercel.** The upload page calls `uploadToSection` from `src/lib/extract/client.ts`. It draws each image page with pdfjs-dist to a JPEG about 1200px wide at quality 0.7 (about 150KB) and sends one page per request, up to 5 at a time. This needs no native libraries on Vercel and stays far under its 4.5MB request limit.
+3. **Transcribe each page with Grok vision.** Prompt: "Transcribe this handwritten or scanned page exactly. Write math as LaTeX. Describe any diagram in one line. Return plain text only."
+4. **Extract concepts from all the page text.** The page number becomes the slide tag, so "slide 4" and the debrief still work.
+5. **Photos and screenshots (.jpg, .png) skip step 1 and 2** and go straight to step 3 as a one-page document. The browser shrinks a photo that is over 3.5MB first.
+
+Routes (the designer's upload page, D3, only needs `uploadToSection`; these are for reference):
+
+| Route | What it does |
+| --- | --- |
+| `POST /api/sections/:id/upload` | Multipart field `file` (PDF, JPG or PNG). Returns 202 `{status, documentId, filename, pageCount, imagePagesPending}`. `imagePagesPending` lists the pages the browser must send; it is empty for a typed PDF or a photo. |
+| `POST /api/documents/:id/pages/:n` | Raw JPEG body for one scanned page. The server transcribes it. When the last scanned page arrives, extraction starts by itself. Safe to send twice. |
+| `GET /api/sections/:id/upload` | Poll this. `processing`, then `ready` (with `concepts`, no answers) or `error` (with a message to show). |
+
+Errors are `{error, code}` with a message that is safe to show: empty file, unsupported type, not a valid PDF, password protected, over 4MB (PDF) or 3.5MB (image), over 40 pages, no readable text, no concepts found, AI unavailable, and a section that already has practice sessions.
+
+Judgment calls (these decide what can break, so they are fixed here):
+
+- **One file per section.** A new upload replaces the section's concepts, but only when the new extraction succeeds, so a failed re-upload keeps the old ones. It is refused with a clear message once any session has used the section, because concept ids are saved in session history. "Slide 4" is then always unambiguous.
+- **Everything the AI returns is checked in code before it is saved.** A concept is dropped if its slide is not a page of the file; its check question is over 15 words; any line is over 20 words or has more than one question; L2 does not name its own slide; L4 does not end with a question; or any line contains the stored answer; or a trace or prediction question's check question gives no input values (a student cannot answer one without the numbers, so matrix-heavy slides may produce fewer trace questions). When concepts are dropped, Grok is asked once to correct just those, and the good ones are kept. The number of concepts therefore varies a little between runs.
+- **The expected answer from Grok is provisional.** The answer must come from running code, never from the AI. B8 stores Grok's reference code and its stated answer. B10 must run the code, use that result as the real expected answer, and turn the question into a plain explain question if they disagree. Compare answers as parsed values, not text: Grok writes `[3, 2]` and the code returns `[3,2]`.
+- **Page images and scans are not kept.** Only the text of each page is stored (`document_pages`, and joined in `documents.raw_text`).
+- **Uploaded text is treated as material, never as instructions.** The prompt says so, and every output is validated, so a slide that says "ignore your instructions" cannot change the output format or add an answer.
+- **Handwriting quality is only as good as Grok vision.** A very messy or very faint page may transcribe badly. The student sees a concept list and can re-upload a clearer scan.
 
 **Phase 3 (6pm to 11pm): orchestration, results, adaptability**
 

@@ -101,9 +101,23 @@ export interface Section {
   type: SectionType;
 }
 
+/**
+ * Upload progress, from `POST` and `GET /api/sections/:id/upload`. The first three fields
+ * are the original contract; the rest were added in B8 and are all optional for old callers.
+ */
 export interface UploadJob {
   status: "processing" | "ready" | "error";
   sectionId: string;
+  documentId?: string;
+  filename?: string;
+  pageCount?: number;
+  /** Pages with no text. The browser renders each to a JPEG and sends it to
+   *  `POST /api/documents/:documentId/pages/:n`. Empty when nothing is waiting. */
+  imagePagesPending?: number[];
+  /** Set when status is "error". Safe to show the student. */
+  error?: string;
+  /** Set when status is "ready". Never contains answers or reference code. */
+  concepts?: Concept[];
 }
 
 export interface DueRecall {

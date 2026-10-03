@@ -43,3 +43,30 @@ export const DUCK = {
 };
 
 export type DuckConfig = typeof DUCK;
+
+// Upload and extraction (B8). Not part of the rules spec; tune here, never in logic.
+export const EXTRACT = {
+  /** A page with fewer non-space characters than this is treated as an image page. */
+  minPageChars: 25,
+  /** Largest PDF the server accepts. Vercel rejects request bodies over 4.5MB. */
+  maxPdfBytes: 4_000_000,
+  /** Largest single page image or photo the server accepts. */
+  maxImageBytes: 3_500_000,
+  maxPages: 40,
+  /** Most concepts kept from one file. */
+  maxConcepts: 15,
+  /** Most characters of document text sent to the extraction prompt. */
+  maxPromptChars: 60_000,
+  /** Browser rendering of image pages (used by src/lib/extract/client.ts). */
+  pageImageWidth: 1_200,
+  pageImageQuality: 0.7,
+  pagesInParallel: 5,
+  /** The check question plus a 5-word acknowledgement must fit in maxDuckWords. */
+  checkPromptMaxWords: 15,
+  visionModel: "grok-4.20-non-reasoning",
+  extractModel: "grok-4.20-non-reasoning",
+  visionTimeoutMs: 40_000,
+  extractTimeoutMs: 90_000,
+  /** A document stuck extracting for longer than this is reported as failed. */
+  extractStuckAfterMs: 5 * 60_000,
+};
