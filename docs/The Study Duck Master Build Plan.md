@@ -430,7 +430,7 @@ Judgment calls (these decide what can break, so they are fixed here):
 
 **Phase 4 (11pm to 4am): prove it, seed it, harden it**
 
-- [ ] **B15 · 11:00pm to 12:30am · Worked-example replay and spec tests.** Script the spec's whole binary search session as an automated test with the judge returning the expected structure, and run the spec's pre-demo test list (scoring, ladder, brakes, leak, AI-off fallback). *Done when:* every level and duck line category matches the worked example and all tests are green.
+- [x] **B15 · 11:00pm to 12:30am · Worked-example replay and spec tests.** Script the spec's whole binary search session as an automated test with the judge returning the expected structure, and run the spec's pre-demo test list (scoring, ladder, brakes, leak, AI-off fallback). *Done when:* every level and duck line category matches the worked example and all tests are green. Covered by `tests/worked-example.test.ts`. Barge-in and pause-after-"and" are Dev A's A13.
 - [ ] **B16 · 12:30 to 2:00am · Demo data.** Seed two or three users with session histories and a second demo course so the profile, recall list and results look real. *Done when:* the demo user's pages are full of believable data.
 - [ ] **B17 · 2:00 to 3:30am · Hardening.** Timeouts and error handling on every route, cached extraction results, database indexes, and a guard against empty or oversized uploads. *Done when:* a failed Grok call never crashes a session.
 - [ ] **B18 · 3:30 to 4:00am · Freeze.** Tag the release, deploy it, and take a database backup. *Done when:* the tagged build is what the domain serves.

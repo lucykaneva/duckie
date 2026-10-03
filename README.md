@@ -40,5 +40,5 @@ Keys go in `.env.local` or `.env`, never in git.
 
 ## Docs
 
-- [Master build plan](docs/The%20Study%20Duck%20Master%20Build%20Plan.md) — API contract, who owns what, B13 done-when
-- [Rules spec](docs/Duck%20When%20the%20Duck%20Speaks%20Up%20(Rules%20Spec).md) — signals, ladder, conversation, end-of-session, profile
+- [Master build plan](docs/The%20Study%20Duck%20Master%20Build%20Plan.md) — API contract, who owns what, B15 done-when
+- [Rules spec](docs/Duck%20When%20the%20Duck%20Speaks%20Up%20(Rules%20Spec).md) — signals, ladder, conversation, end-of-session, profile, worked-example replay

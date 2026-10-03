@@ -3,7 +3,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { DUCK } from "../src/lib/duck/config";
+import { DUCK, ENGINE } from "../src/lib/duck/config";
+
+// Same as the other worked-example scripts: the spec table is "Got it, next question".
+// Reinforce after a correct answer is covered in reinforce.test.ts.
+ENGINE.reinforceAfterCorrect = false;
 import { SEED_CONCEPTS } from "../src/lib/db/seed-data";
 import { findLeak } from "../src/lib/engine/answers";
 import { needsJudge, orchestrateTurn } from "../src/lib/engine/orchestrate";

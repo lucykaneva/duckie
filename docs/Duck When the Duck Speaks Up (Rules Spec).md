@@ -235,6 +235,12 @@ Each successful recall doubles the interval, up to 30 days, following Burrow's r
 - **Recall dates** start at 1 day (misconception, explained-to, skipped, not-yet), 2 days (assisted) or 4 days (owned). A later successful recall (owned or assisted again) doubles the interval up to 30 days; a miss resets to 1 day.
 - **`GET /results`** returns the contract shape from live concept state and the student's own quotes. **`GET /review/due`** lists concepts whose due date is today or earlier. **`GET /log`** lists every turn with signals, score, level and line.
 
+**How we prove the rules** (added by Dev B in B15). Covered by `tests/worked-example.test.ts`.
+
+- **The spec table is one script.** The judge returns the expected structure. Code picks kind, level and concept; the spoken line is the seed fallback for that category. Live wording is Dev A's (`tests/orchestrate.test.ts`).
+- **Two engine joins the table writes as two rows.** Celebration then the next L0; "Got it." then the O(log n) check. The categories still match.
+- **Pre-demo B list:** scoring `tests/score.test.ts`, ladder `tests/ladder.test.ts`, brakes `tests/brakes.test.ts`, leak `tests/answers.test.ts` and `tests/wordMove.leak.test.ts`, AI-off `tests/fallback-session.test.ts`. Barge-in and pause-after-"and" are Dev A's voice tests (A13).
+
 **How the duck adapts** (added by Dev B in B13). Covered by `tests/profile.test.ts`.
 
 - **Code owns the numbers.** After `/end`, skips, mid-thought pauses and the Illusion Score become a small set of config overrides. Each number stays within 25% of the default (`PROFILE.maxOverridePct`). Grok never sets a threshold.
@@ -339,14 +345,14 @@ The numbers above are starting guesses; test with real people early and tune the
 
 **Before the demo**
 
-- [ ] Unit-test the scoring: every signal, the cap at 1, the reset on success
-- [ ] Unit-test the ladder: each score band maps to the right level; a request for help starts at L3
-- [ ] Unit-test the brakes: skip, two skips, question streak, silence at 8, 20 and 45 s
-- [ ] Leak test: the duck never says a stored trace answer before the student commits
-- [ ] Replay the worked example as a script and check every level and duck line
-- [ ] Barge-in: talk over the duck 10 times; it stops every time
-- [ ] Pause test: pause mid-sentence for 2 s after "and"; the duck waits
-- [ ] Fallback: turn off the AI; the session continues on precomputed questions
+- [x] Unit-test the scoring: every signal, the cap at 1, the reset on success (`tests/score.test.ts`)
+- [x] Unit-test the ladder: each score band maps to the right level; a request for help starts at L3 (`tests/ladder.test.ts`)
+- [x] Unit-test the brakes: skip, two skips, question streak, silence at 8, 20 and 45 s (`tests/brakes.test.ts`)
+- [x] Leak test: the duck never says a stored trace answer before the student commits (`tests/answers.test.ts`, `tests/wordMove.leak.test.ts`)
+- [x] Replay the worked example as a script and check every level and duck line (`tests/worked-example.test.ts`)
+- [ ] Barge-in: talk over the duck 10 times; it stops every time (Dev A, A13)
+- [ ] Pause test: pause mid-sentence for 2 s after "and"; the duck waits (Dev A, A13)
+- [x] Fallback: turn off the AI; the session continues on precomputed questions (`tests/fallback-session.test.ts`)
 
 **Tuning with real people (5 hackers, 5 minutes each)**
 
