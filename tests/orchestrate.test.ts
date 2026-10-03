@@ -202,7 +202,7 @@ describe("the AI falling back", () => {
     stateOf(s, "c_15").moves = 1;
     const deps = withGrok({
       judge: [verdicts([{ conceptId: "c_15" }])],
-      word: ["What happens to lo when it's right next to hi?"],
+      word: ["Why do you think that's fine? Look at lo when it's right next to hi."],
     });
     const { outcome } = await orchestrateTurn(
       { defs, run: s, answers, text: "I think that's fine?", nowMs: 0 },
@@ -276,7 +276,7 @@ describe("worked example through the real judgeTurn and wordMove", () => {
       {
         text: "Um, I think 5, then 7, then maybe 9?",
         grok: verdicts([]),
-        spoken: "Slide 7 shows when it stops. What has to be true to stop?",
+        spoken: "Oh, why do you think that? Slide 7 shows when it stops.",
       },
       {
         text: "When there's nothing left to search. After 7 there's nothing left, so just 5 and 7.",
@@ -286,7 +286,7 @@ describe("worked example through the real judgeTurn and wordMove", () => {
       {
         text: "I think that's fine?",
         grok: verdicts([{ conceptId: "c_15", misconception: "I think that's fine?" }]),
-        spoken: "What happens to lo when it's right next to hi?",
+        spoken: "Why do you think that's fine? Look at lo when it's right next to hi.",
       },
       {
         text: "It stays the same… so it loops forever.",
@@ -342,7 +342,7 @@ describe("worked example through the real judgeTurn and wordMove", () => {
     expect(log[0].line).toBe("Wait, so my pebbles have to be in order first?");
     expect(log[1].line).toBe("Got it. Test me: 1, 3, 5, 7, 9, looking for 6. Which numbers do you check?");
     expect(log[2].signals).toEqual(["wrongTrace", "hedging"]);
-    expect(log[2].line).toBe("Slide 7 shows when it stops. What has to be true to stop?");
+    expect(log[2].line).toBe("Oh, why do you think that? Slide 7 shows when it stops.");
     expect(log[3].kind).toBe("celebrate");
     expect(log[3].line).toBe("Ooh, nice. You found where it stops.");
     expect(log[4].line).toBe("My friend wrote lo = mid, not mid + 1. Is that okay?");

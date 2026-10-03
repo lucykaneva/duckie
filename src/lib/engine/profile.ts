@@ -4,10 +4,9 @@
 
 import { DUCK, PROFILE } from "../duck/config";
 import type { DuckConfig } from "../duck/config";
-import type { MoveKind, Profile, TurnLogRow } from "../duck/types";
+import type { ConceptState, MoveKind, Profile, TurnLogRow } from "../duck/types";
 import { findQuote } from "../prompts/quotes";
 import { understandingPercent, illusionScore } from "./debrief";
-import type { ConceptRun } from "./turn";
 
 const MID_THOUGHT = /(?:^|[^a-z])(and|so|because|like|um|uh)\s*[.?!]*\s*$/i;
 
@@ -23,7 +22,7 @@ export interface ProfileFacts {
 }
 
 export function profileFacts(input: {
-  concepts: { state: string; skipped: boolean }[];
+  concepts: { state: ConceptState; skipped: boolean }[];
   turns: { text: string; signals: string[] }[];
   confidence: number;
 }): ProfileFacts {

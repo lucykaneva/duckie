@@ -170,6 +170,15 @@ describe("wording a reply to a wrong answer", () => {
     expect(lineProblem("Oh, why do you think that? Try 2, 5, 9.", { ...BASE, studentWas: "wrong", level: "L3" })).toBeNull();
   });
 
+  it("needs the question to ask why, then a small hint as a statement", () => {
+    const wrong = { ...BASE, studentWas: "wrong", level: "L3" } as const;
+    expect(lineProblem("Oh, why do you think that?", wrong)).toMatch(/small hint/);
+    expect(lineProblem("What about the list? Try 2, 5, 9.", wrong)).toMatch(/why they think that/);
+    expect(lineProblem("Oh, why do you think that? Try 2, 5, 9.", wrong)).toBeNull();
+    // A bare statement-style "why" is not a question.
+    expect(lineProblem("Tell me why. Try 2, 5, 9, looking for 9?", wrong)).toMatch(/why they think that/);
+  });
+
   it("leaves the L4 explanation alone: that one explains, then asks them to say it back", async () => {
     const g = fakeGrok("It only works on sorted lists, because half is thrown away. Can you say why?");
     await wordMoveDetailed({ ...BASE, level: "L4", studentWas: "wrong" }, { fetchImpl: g.fetchImpl });
