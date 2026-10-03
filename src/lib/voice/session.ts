@@ -37,6 +37,8 @@ export type VoiceEvent =
   | { type: "barge_in"; at: string }
   | { type: "auto_response_cancelled" }
   | { type: "waiting_unfinished_thought"; text: string }
+  /** The duck's audio has finished playing (not just generated). */
+  | { type: "duck_idle" }
   | { type: "mic_level"; peak: number; chunksSent: number }
   | { type: "server"; eventType: string; raw: unknown }
   | { type: "error"; message: string };
@@ -81,6 +83,7 @@ export class DuckVoice {
       this.player = new PcmPlayer();
       this.player.onIdle = () => {
         if (this.status === "speaking") this.setStatus("listening");
+        this.emit({ type: "duck_idle" });
       };
 
       const token = await tokenPromise;
