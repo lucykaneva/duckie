@@ -1,9 +1,9 @@
 // Browser-only. The whole duck loop in one place: this is what the session page (and /dev/voice) uses.
 // Code on the server decides every move; this class only listens, sends turns, and speaks the line back.
 import { DUCK } from "@/lib/duck/config";
-import type { DuckMove, SessionStart } from "@/lib/duck/types";
+import type { SessionStart } from "@/lib/duck/types";
 import { DuckVoice, type StudentTurn, type VoiceEvent } from "./session";
-import { httpTransport, type DuckTransport } from "./transport";
+import { httpTransport, type DuckTransport, type SpokenMove } from "./transport";
 
 /** The five states the designer's status chips follow. */
 export type DuckState = "idle" | "listening" | "thinking" | "speaking" | "paused" | "ended";
@@ -11,7 +11,7 @@ export type DuckState = "idle" | "listening" | "thinking" | "speaking" | "paused
 export type DuckSessionEvent =
   | { type: "state"; state: DuckState }
   | { type: "started"; start: SessionStart }
-  | { type: "move"; move: DuckMove; source: "opening" | "turn" | "silence" | "end" }
+  | { type: "move"; move: SpokenMove; source: "opening" | "turn" | "silence" | "end" }
   | { type: "student_turn"; turn: StudentTurn & { silenceBeforeMs: number } }
   | { type: "partial"; text: string }
   | { type: "filler" }
@@ -33,7 +33,9 @@ export const FILLER_LINE = "Hmm, let me think.";
 const SILENCE_STEPS_MS = [DUCK.silenceRephraseMs, DUCK.silenceOfferSkipMs, DUCK.silencePauseMs];
 const IDLE_WAIT_TIMEOUT_MS = 6_000;
 // Moves after which the duck is not waiting for an answer, so no silence timers.
-const NO_SILENCE_TIMER: DuckMove["kind"][] = ["wrap_up", "pause"];
+// check_in is deliberately not here: it is a proposal the student answers.
+const NO_SILENCE_TIMER: SpokenMove["kind"][] = ["wrap_up", "pause"];
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export class DuckSession {
   private voice: DuckVoice;
@@ -179,7 +181,7 @@ export class DuckSession {
       this.voice.speak(FILLER_LINE); // once per turn, by construction
     }, DUCK.fillerAfterMs);
 
-    let move: DuckMove;
+    let move: SpokenMove;
     try {
       move = await this.transport.sendTurn(sessionId, { ...turn, silenceBeforeMs });
     } catch (error) {
@@ -211,11 +213,12 @@ export class DuckSession {
 
   // ---- speaking a move ----------------------------------------------------
 
-  private deliver(move: DuckMove, source: "opening" | "turn" | "silence" | "end", opts: { armSilence: boolean }) {
+  private deliver(move: SpokenMove, source: "opening" | "turn" | "silence" | "end", opts: { armSilence: boolean }) {
     this.emit({ type: "move", move, source });
     this.duckFinishedAt = null;
-    this.armSilenceOnIdle = opts.armSilence && !NO_SILENCE_TIMER.includes(move.kind);
-    if (opts.armSilence) this.awaitingAnswer = this.armSilenceOnIdle;
+    const followUp = move.then;
+    this.armSilenceOnIdle = opts.armSilence && !NO_SILENCE_TIMER.includes(move.kind) && !followUp;
+    if (opts.armSilence) this.awaitingAnswer = this.armSilenceOnIdle || Boolean(followUp);
     if (move.sessionState === "paused" || move.kind === "pause") {
       this.awaitingAnswer = false;
       this.clearSilenceTimers();
@@ -224,9 +227,32 @@ export class DuckSession {
       this.setState("paused");
       return;
     }
-    if (move.kind === "wrap_up") this.finishAfterIdle = true;
+    // Only the closing summary returned by /end finishes the session.
+    if (source === "end") this.finishAfterIdle = true;
     this.setState("speaking");
     this.voice.speak(move.line);
+
+    if (followUp) {
+      void this.speakFollowUp(move, source);
+    } else if (move.kind === "wrap_up" && source !== "end") {
+      void this.closeAfterProposal();
+    }
+  }
+
+  /** celebrate: speak the line, wait for the audio to end plus afterCelebrationMs, then the next line. */
+  private async speakFollowUp(move: SpokenMove, source: "opening" | "turn" | "silence" | "end") {
+    const seq = this.turnSeq;
+    await this.waitForIdle();
+    await sleep(DUCK.afterCelebrationMs);
+    if (seq !== this.turnSeq || this.isEnded() || !move.then) return; // the student spoke; their words win
+    this.deliver(move.then, source, { armSilence: true });
+  }
+
+  /** wrap_up from /turn or /silence: speak it, then call /end, speak the summary, then finish. */
+  private async closeAfterProposal() {
+    await this.waitForIdle();
+    if (this.isEnded()) return;
+    await this.end("wrap_up");
   }
 
   // ---- silence timers (8 s rephrase, 20 s offer skip, 45 s pause) ----------
@@ -244,6 +270,7 @@ export class DuckSession {
     this.emit({ type: "silence_timer", ms });
     try {
       const move = await this.transport.sendSilence(this.sessionId, ms);
+      if (!move) return; // 409: nothing to say right now, not an error
       // The student may have spoken while we waited; their words win.
       if (this.silenceTimers.length === 0) return;
       // Later timers are already running from the original pause, so do not restart them.
