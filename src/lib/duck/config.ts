@@ -79,3 +79,13 @@ export const EXTRACT = {
   /** A document stuck extracting for longer than this is reported as failed. */
   extractStuckAfterMs: 5 * 60_000,
 };
+
+// Grok text calls made by Dev A's prompt functions (src/lib/prompts). Tune here, never in logic.
+export const PROMPTS = {
+  judgeModel: "grok-4.20-non-reasoning",
+  /** The judge shares the 1.5 s filler window with wording, so it gets little time. */
+  judgeTimeoutMs: 4_000,
+  judgeMaxTokens: 700,
+  /** A judge quote with fewer words than this is dropped: one word is too easy to match by accident. */
+  minQuoteWords: 2,
+};
