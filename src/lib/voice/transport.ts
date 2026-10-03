@@ -1,4 +1,5 @@
 // How the duck session talks to Dev B's API. The real one uses fetch; the mock needs no database.
+import { VOICE } from "@/lib/duck/config";
 import type { DuckMove, SessionStart } from "@/lib/duck/types";
 
 /** A move as the server sends it. A celebrate move can carry `then`, the move to make after it. */
@@ -29,11 +30,19 @@ export interface DuckTransport {
 }
 
 async function post<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      // A hung server must not leave the duck "thinking" forever.
+      signal: AbortSignal.timeout(VOICE.requestTimeoutMs),
+    });
+  } catch (error) {
+    const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    throw new HttpError(timedOut ? "The server took too long to answer" : "Could not reach the server", timedOut ? 408 : 0);
+  }
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (!res.ok) throw new HttpError(data.error ?? `${url} returned ${res.status}`, res.status);
   return data;
@@ -56,9 +65,10 @@ function move(kind: DuckMove["kind"], line: string, sessionState: DuckMove["sess
   return { kind, level: "L1", conceptId: "c_12", line, sessionState, concepts: [] };
 }
 
-/** Fake server for testing the voice loop without a database. `turnDelayMs` lets you provoke the filler line. */
-export function mockTransport(options: { turnDelayMs?: number } = {}): DuckTransport {
+/** Fake server for testing the voice loop without a database. `turnDelayMs` provokes the filler line; `failTurns` provokes recovery. */
+export function mockTransport(options: { turnDelayMs?: number; failTurns?: number } = {}): DuckTransport {
   let turns = 0;
+  let failed = 0;
   return {
     async startSession(input) {
       return {
@@ -70,6 +80,11 @@ export function mockTransport(options: { turnDelayMs?: number } = {}): DuckTrans
     },
     async sendTurn() {
       await wait(options.turnDelayMs ?? 0);
+      // `failTurns` makes the first N turn requests fail (Infinity = always), to test recovery.
+      if (failed < (options.failTurns ?? 0)) {
+        failed++;
+        throw new HttpError("Mock server failure", 500);
+      }
       turns++;
       if (turns === 3) {
         return {

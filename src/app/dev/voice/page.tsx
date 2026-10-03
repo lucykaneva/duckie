@@ -36,6 +36,7 @@ export default function VoiceSpikePage() {
   const [deviceId, setDeviceId] = useState("");
   const [mode, setMode] = useState<"mock" | "real">("mock");
   const [slowServer, setSlowServer] = useState(false);
+  const [failTurns, setFailTurns] = useState(0);
   const [sectionId, setSectionId] = useState("sec_1");
   const [topic, setTopic] = useState("Binary search");
   const [confidence, setConfidence] = useState(4);
@@ -114,6 +115,9 @@ export default function VoiceSpikePage() {
       case "dropped_reply":
         addRow("system", `reply dropped: ${event.reason}`);
         break;
+      case "recovering":
+        addRow("system", `server problem (${event.failures} in a row): ${event.message}${event.spoke ? "" : " (said nothing)"}`);
+        break;
       case "error":
         addRow("system", `ERROR: ${event.message}`);
         break;
@@ -134,7 +138,7 @@ export default function VoiceSpikePage() {
         topic,
         confidence,
         deviceId: deviceId || undefined,
-        transport: mode === "mock" ? mockTransport({ turnDelayMs: slowServer ? 3_000 : 0 }) : httpTransport,
+        transport: mode === "mock" ? mockTransport({ turnDelayMs: slowServer ? 3_000 : 0, failTurns }) : httpTransport,
       },
       onEvent,
     );
@@ -160,6 +164,17 @@ export default function VoiceSpikePage() {
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={slowServer} onChange={(e) => setSlowServer(e.target.checked)} disabled={running} />
             Slow server (3 s), to hear the filler
+          </label>
+        ) : null}
+        {mode === "mock" ? (
+          <label className="flex items-center gap-2">
+            Server fails
+            <select className="rounded border px-2 py-2" value={failTurns} onChange={(e) => setFailTurns(Number(e.target.value))} disabled={running}>
+              <option value={0}>never</option>
+              <option value={1}>the first turn, then recovers</option>
+              <option value={2}>the first 2 turns, then recovers</option>
+              <option value={999}>every turn (the duck gives up after 3)</option>
+            </select>
           </label>
         ) : (
           <>

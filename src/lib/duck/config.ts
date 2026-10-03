@@ -113,3 +113,11 @@ export const PROMPTS = {
   wordStudentCharsMax: 400,
   wordToneHintCharsMax: 160,
 };
+
+// The browser side of the voice loop (Dev A, src/lib/voice).
+export const VOICE = {
+  /** A server call that takes longer than this has failed. /turn is normally 1 to 4 s; 12 s is stuck. */
+  requestTimeoutMs: 12_000,
+  /** This many failed turns in a row and the duck stops the session instead of asking again. */
+  maxFailedTurnsInARow: 3,
+};

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   isWorded,
   lineProblem,
+  slidesUnavailable,
   wordMove,
   wordMoveDetailed,
   type WordMoveInput,
@@ -65,7 +66,7 @@ describe("lineProblem", () => {
   it("rejects an empty line, more than 20 words, and more than one question", () => {
     expect(lineProblem("   ", ok)).toMatch(/empty/);
     expect(lineProblem(Array(21).fill("word").join(" "), ok)).toMatch(/21 words/);
-    expect(lineProblem(Array(20).fill("word").join(" "), ok)).toBeNull();
+    expect(lineProblem(Array(19).fill("word").join(" ") + " ok?", ok)).toBeNull();
     expect(lineProblem("Why? And then what?", ok)).toMatch(/more than one question/);
   });
 
@@ -239,5 +240,61 @@ describe("what Grok is sent", () => {
     const user = grok.bodies[0].messages[1].content;
     expect(user).toContain("THE END new line");
     expect(user.length).toBeLessThan(1_200);
+  });
+});
+
+describe("questions need a question mark", () => {
+  it("turns a question that ends in a full stop into a real question", async () => {
+    const grok = fakeGrok(["What does slide 4 say about this."]);
+    const result = await wordMoveDetailed(
+      { ...BASE, level: "L2", slide: 4 },
+      { fetchImpl: grok.fetchImpl },
+    );
+    expect(result).toMatchObject({ line: "What does slide 4 say about this?", source: "ai" });
+  });
+
+  it("fixes only the last sentence, and leaves statements alone", async () => {
+    const one = fakeGrok(["Slide 4 talks about order. What does it say."]);
+    const fixed = await wordMoveDetailed({ ...BASE, level: "L2", slide: 4 }, { fetchImpl: one.fetchImpl });
+    expect(fixed.line).toBe("Slide 4 talks about order. What does it say?");
+
+    const statement = fakeGrok(["Try it with just 2, 5, 9, looking for 9."]);
+    const kept = await wordMoveDetailed({ ...BASE, level: "L3" }, { fetchImpl: statement.fetchImpl });
+    expect(kept.line).toBe("Try it with just 2, 5, 9, looking for 9.");
+  });
+
+  it("rejects an L1 or L2 line that is not a question at all, then retries", async () => {
+    expect(lineProblem("Halving sounds neat.", { kind: "question", level: "L1" })).toMatch(/question mark/);
+    const grok = fakeGrok(["Halving sounds neat.", "Does halving work on my pebbles?"]);
+    const result = await wordMoveDetailed(BASE, { fetchImpl: grok.fetchImpl });
+    expect(result).toMatchObject({ line: "Does halving work on my pebbles?", attempts: 2 });
+  });
+});
+
+describe("a student without the slides", () => {
+  it("is recognised from what they said", () => {
+    expect(slidesUnavailable("I don't have the slides right now.")).toBe(true);
+    expect(slidesUnavailable("I can't see the slides")).toBe(true);
+    expect(slidesUnavailable("No slides here, sorry")).toBe(true);
+    expect(slidesUnavailable("The slides say it halves")).toBe(false);
+    expect(slidesUnavailable("I don't know. Next slide")).toBe(false);
+  });
+
+  it("tells Grok not to mention slides, and does not demand slide N at L2", async () => {
+    const grok = fakeGrok(["If my list is a jumble, would halving still work?"]);
+    const input = { ...BASE, level: "L2" as const, slide: 4, studentWords: "I don't have the slides right now." };
+    const result = await wordMoveDetailed(input, { fetchImpl: grok.fetchImpl });
+    expect(result).toMatchObject({ source: "ai", attempts: 1 });
+    const user = grok.bodies[0].messages[1].content;
+    expect(user).toMatch(/do not mention slides/);
+    expect(user).not.toContain("(slide 4)");
+  });
+
+  it("rejects a line that still mentions slides, then retries", async () => {
+    const grok = fakeGrok(["What does slide 4 say about this?", "How would halving treat a jumbled list?"]);
+    const input = { ...BASE, level: "L2" as const, slide: 4, studentWords: "I don't have the slides." };
+    const result = await wordMoveDetailed(input, { fetchImpl: grok.fetchImpl });
+    expect(result).toMatchObject({ line: "How would halving treat a jumbled list?", attempts: 2 });
+    expect(grok.bodies[1].messages.at(-1)?.content).toMatch(/cannot see the slides/);
   });
 });
