@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DUCK } from "../src/lib/duck/config";
+import { DUCK, ENGINE } from "../src/lib/duck/config";
 import { SEED_CONCEPTS } from "../src/lib/db/seed-data";
 import { needsJudge, orchestrateSilence, orchestrateTurn } from "../src/lib/engine/orchestrate";
 import type { OrchestrateDeps } from "../src/lib/engine/orchestrate";
@@ -7,6 +7,10 @@ import { freshSession, type ConceptDef, type SessionRun } from "../src/lib/engin
 import { wordCount } from "../src/lib/engine/wording";
 import { judgeTurn } from "../src/lib/prompts/judgeTurn";
 import { wordMoveDetailed } from "../src/lib/prompts/wordMove";
+
+// These tests cover the ladder and brakes with the plain "Got it, next question" flow (the spec's worked example).
+// The reinforce step after a correct answer has its own tests in reinforce.test.ts.
+ENGINE.reinforceAfterCorrect = false;
 
 const defs: ConceptDef[] = SEED_CONCEPTS.map((c) => ({
   id: c.id,

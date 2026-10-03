@@ -29,6 +29,7 @@ import {
 import type { SignalKind } from "./signals";
 import {
   ACK_SKIP_LINE,
+  REINFORCE_LINE,
   ALL_ASKED_PROPOSAL_LINE,
   ASK_AGAIN_CHECK_IN_LINE,
   ASK_AGAIN_PROPOSAL_LINE,
@@ -381,25 +382,26 @@ export function processTurn(
   // 2c. The student asked what the duck's last question meant. That is not a failed attempt and not a request
   // for a bigger hint, so the ladder stays where it is: the same question, said again (wordMove words it).
   if (
-    focus &&
+    (focus || (session.lastMoveKind === "reinforce" && focusRun)) &&
     session.pending === null &&
     detectClarification(text) &&
     session.lastMoveKind !== null &&
-    ["question", "rephrase", "open", "offer_skip"].includes(session.lastMoveKind)
+    ["question", "rephrase", "open", "offer_skip", "reinforce"].includes(session.lastMoveKind)
   ) {
+    const target = (focus ?? focusRun) as ConceptRun;
     const kind: MoveKind = session.lastMoveKind === "question" ? "rephrase" : (session.lastMoveKind as MoveKind);
     return {
       session: { ...carried(), lastMoveKind: kind },
       move: {
         kind,
-        level: focus.levelReached,
-        conceptId: focus.conceptId,
+        level: target.levelReached,
+        conceptId: target.conceptId,
         line: session.lastLine,
         sessionState: "active",
         concepts: progress(concepts),
       },
       signals: [],
-      scoreAfter: focus.score,
+      scoreAfter: target.score,
       resolved: [],
     };
   }
@@ -648,6 +650,27 @@ export function processTurn(
   } else {
     planned = planNext();
     movingOn = true;
+  }
+
+  // 4b. They got it right: confirm it, give one small hint and ask them to say it back before moving on (reinforce).
+  // Not after an L4 explanation (that already ended in a teach-back) and not when the student is closing.
+  if (
+    ENGINE.reinforceAfterCorrect &&
+    focus &&
+    focusResolved &&
+    focusResolved.state !== "explained_to" &&
+    !planned.close
+  ) {
+    planned = {
+      kind: "reinforce",
+      level: focus.levelReached,
+      line: REINFORCE_LINE,
+      concept: focus,
+      help: false,
+      sessionState: "active",
+    };
+    ack = undefined; // the reinforce line already says "Got it" in its own words
+    movingOn = false;
   }
 
   const celebrating = celebrate !== undefined;

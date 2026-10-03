@@ -54,6 +54,12 @@ export const ENGINE = {
    */
   shortTurnMaxWords: 3,
   /**
+   * After a correct answer the duck gives one small hint and asks the student to say it back in their own words,
+   * before moving on. Off = "Got it" and straight to the next question. Not used after an L4 explanation: that
+   * already ended in a teach-back.
+   */
+  reinforceAfterCorrect: true,
+  /**
    * A student question ("Is it log n?") means they need help. Only a short, single-sentence question counts, so a
    * long explanation that ends in "right?" is still scored as teaching. Without a question mark the cap is lower.
    */

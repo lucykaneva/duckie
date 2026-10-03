@@ -262,10 +262,15 @@ async function wordAndGuard(
     toneHint?: string;
     run: SessionRun;
     judge: JudgeResult;
+    /** The signals code applied to the concept in focus this turn. */
+    signals: string[];
   },
   deps: OrchestrateDeps,
 ): Promise<{ move: DuckMove; words: TurnMeta["words"]; leakBlocked: string[] }> {
   const words: TurnMeta["words"] = [];
+
+  // Code, not Grok, decides the student was wrong: a stated misconception, a contradiction or a wrong trace.
+  const wasWrong = context.signals.some((s) => s === "misconception" || s === "contradiction" || s === "wrongTrace");
 
   const wordLine = async (m: DuckMove): Promise<string> => {
     if (!isWorded(m)) return m.line;
@@ -281,6 +286,7 @@ async function wordAndGuard(
       fallbackLine: m.line,
       situation: conversationSituation(context.defs, context.run, context.judge),
       lastDuckLine: context.run.lastLine,
+      ...(wasWrong && (m.kind === "question" || m.kind === "rephrase") ? { studentWas: "wrong" as const } : {}),
     });
     words.push({
       source: result.source,
@@ -328,6 +334,7 @@ export async function orchestrateTurn(
       toneHint: args.toneHint,
       run: args.run,
       judge: judged.result,
+      signals: raw.signals,
     },
     deps,
   );
@@ -385,6 +392,7 @@ export async function orchestrateSilence(
       toneHint: args.toneHint,
       run: args.run,
       judge: emptyJudgeResult(),
+      signals: [],
     },
     deps,
   );

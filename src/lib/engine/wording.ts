@@ -6,6 +6,8 @@ import { DUCK } from "../duck/config";
 export const OPENING_LINE = "Ooh! Can you explain it to me? I'm just a duck.";
 export const OFFER_SKIP_LINE = "Want to skip this one?";
 export const ACK_LINE = "Got it.";
+/** Backup for the reinforce move (wordMove normally writes it from the student's own words). */
+export const REINFORCE_LINE = "Got it. Can you say that once more in your own words?";
 export const ACK_AFTER_EXPLAIN_LINE = "Okay, that makes sense now.";
 export const ACK_SKIP_LINE = "Okay.";
 
