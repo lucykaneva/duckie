@@ -181,6 +181,19 @@ Praise is rare and specific, so it means something. It follows Burrow's rule: ce
 - **The line names the concept** ("Ooh, nice. You got when it stops.") until Dev A's `wordMove` writes a specific one ("Ooh, you caught the infinite loop"). A concept name too long to fit in 20 words falls back to "Ooh, nice. You got that one."
 - **After L4, the answer is always neutral,** even if the score had climbed far past 0.45.
 
+**How the code checks answers and runs the leak check** (added by Dev B in B10; needs Angela's yes). Covered by `tests/answers.test.ts` and `tests/run-code.test.ts`.
+
+- **The true answer is computed once, at upload, by running the reference code.** Grok's own guess is only a first draft: the stored answer is whatever the code returns. The code runs in a separate process with no secrets, no network, no file access, a 1 second limit and a memory cap. If it fails, times out or returns something we cannot check, the concept becomes a plain explain question. The same happens if one of its own lines says the real answer.
+- **Only simple answers are checked:** a number, a list of numbers, a word or phrase, a list of those, or true/false.
+- **A student's answer is a "commit" only if it contains something we can read.** "I don't know", "can you explain it?" or "skip" are not commits and are never marked wrong. Only a commit can add the 0.3 wrong-trace signal or count as correct.
+- **Numbers must match exactly, in order.** Repeating a value while explaining is fine ("After 7 there's nothing left, so just 5 and 7" is correct). Adding a value ("5, then 7, then maybe 9") or reversing the order is wrong. Spoken numbers count ("five and seven", "twenty-five"); "Slide 7" does not; a lone "one" is treated as the word, not the number.
+- **A miss on a word answer is never "wrong".** A student can say the same idea in other words, so a word answer is either correct or not judged.
+- **The reply to the L3 example is not compared.** L3 uses different values, so comparing it with the stored answer would mark a correct student wrong.
+- **What counts as saying the answer.** A line leaks if it contains a run of numbers that is exactly the answer ("you'd check 5 and 7"), or the stored word. The question's own list (`1, 3, 5, 7, 9`) contains 5 and 7 but is a longer run, so it is allowed, and so is anything the check question itself already says. A single-number answer is flagged whenever the duck says that number on its own, which can block a harmless line; the replacement is the safe direction.
+- **True/false answers are never checked for leaks,** because "yes" and "no" appear in ordinary questions.
+- **A blocked line is replaced, not repaired.** The duck says the concept's precomputed line for that level if it is safe, otherwise "Let's slow down. Can you walk me through it step by step?". This runs on every line the server sends, whoever wrote it.
+- **Once the student has committed to an answer for a concept, the duck may say it** (for example in the L4 explanation).
+
 ## Outside a session: invitations
 
 Outside a session the duck never speaks; it invites with a quiet laptop notification. A speaker that talks into a room unprompted is the fastest way to get unplugged.

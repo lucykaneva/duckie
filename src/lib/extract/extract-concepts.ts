@@ -1,4 +1,7 @@
 import { EXTRACT } from "../duck/config";
+import { findLeak, normalizeAnswer } from "../engine/answers";
+import { runReferenceCode } from "../engine/run-code";
+import type { RunResult } from "../engine/run-code";
 import { ExtractError } from "./errors";
 import { callGrok } from "./grok";
 import type { FetchLike, GrokMessage } from "./grok";
@@ -99,6 +102,52 @@ function buildMaterial(pages: TextPage[]): { text: string; lastPage: number; pag
 
 export interface ExtractDeps {
   fetchImpl?: FetchLike;
+  /** Runs reference code in the sandbox. Tests pass a fake. */
+  runCode?: (code: string) => Promise<RunResult>;
+}
+
+/**
+ * Replace Grok's guessed answer with what the reference code really returns (spec rule 7).
+ * A concept whose code fails, times out or returns something we cannot check becomes a plain explain
+ * question, and so does one whose own lines say the real answer. The check question may state the
+ * input values but never the result.
+ */
+export async function verifySecrets(
+  concepts: ExtractedConcept[],
+  runCode: (code: string) => Promise<RunResult> = runReferenceCode,
+): Promise<{ concepts: ExtractedConcept[]; problems: string[] }> {
+  const problems: string[] = [];
+  const checked = await Promise.all(
+    concepts.map(async (concept): Promise<ExtractedConcept> => {
+      if (!concept.secret) return concept;
+      const downgrade = (why: string): ExtractedConcept => {
+        problems.push(`${concept.name}: ${why}, treated as explain`);
+        const { secret: _secret, ...rest } = concept;
+        void _secret;
+        return { ...rest, kind: "explain" };
+      };
+
+      const result = await runCode(concept.secret.referenceCode);
+      if (!result.ok) return downgrade(`reference code failed (${result.error})`);
+
+      const lines = [
+        concept.checkPrompt,
+        concept.fallbackQuestions.L1,
+        concept.fallbackQuestions.L2,
+        concept.fallbackQuestions.L3,
+        concept.fallbackQuestions.L4,
+      ];
+      const secret = { expectedAnswer: result.json, givenText: concept.checkPrompt };
+      if (lines.some((line) => findLeak(line, [secret]) !== null)) {
+        return downgrade("a line says the real answer");
+      }
+      if (result.json !== (normalizeAnswer(concept.secret.expectedAnswer) ?? concept.secret.expectedAnswer)) {
+        problems.push(`${concept.name}: Grok expected ${concept.secret.expectedAnswer}, the code returned ${result.json}; using the code's`);
+      }
+      return { ...concept, secret: { referenceCode: concept.secret.referenceCode, expectedAnswer: result.json } };
+    }),
+  );
+  return { concepts: checked, problems };
 }
 
 /** Problems worth asking the model to fix: a concept was dropped for a reason it can correct. */
@@ -187,5 +236,6 @@ export async function extractConcepts(
       "Couldn't find concepts to practise in this file. Try slides or notes with more content.",
     );
   }
-  return { concepts, problems };
+  const verified = await verifySecrets(concepts, deps.runCode);
+  return { concepts: verified.concepts, problems: [...problems, ...verified.problems] };
 }

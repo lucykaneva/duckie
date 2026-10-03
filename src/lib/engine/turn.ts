@@ -98,6 +98,8 @@ export interface SessionRun {
   pausedMs: number;
   /** The highest silence step (1 = 8 s, 2 = 20 s, 3 = 45 s) handled since the student last spoke. */
   silenceStep: 0 | 1 | 2 | 3;
+  /** Trace and prediction concepts the student has given an answer to. Until then the leak check guards the answer. */
+  committed: string[];
 }
 
 export interface TurnInput {
@@ -160,6 +162,7 @@ export function freshSession(defs: ConceptDef[], startedAtMs = 0): SessionRun {
     pausedAtMs: null,
     pausedMs: 0,
     silenceStep: 0,
+    committed: [],
   };
 }
 
@@ -607,6 +610,10 @@ export function processTurn(
       wrapUpProposed,
       pending: planned.pending ?? null,
       closing: planned.close === true,
+      committed:
+        input.answer && !session.committed.includes(input.answer.conceptId)
+          ? [...session.committed, input.answer.conceptId]
+          : session.committed,
     },
     move,
     signals: focus ? focusApplied : [...appliedAll],

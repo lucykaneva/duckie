@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import type { DuckMove, JudgeResult, Level, MoveKind } from "../duck/types";
+import { committedAnswer } from "../engine/commit";
+import { guardMove } from "../engine/guard";
+import type { StoredAnswer } from "../engine/guard";
 import { processSilence, silenceStepFor } from "../engine/silence";
 import { processTurn, freshSession, openingMove } from "../engine/turn";
 import type { ConceptDef, ConceptRun, SessionRun } from "../engine/turn";
@@ -195,6 +198,20 @@ async function lockAndLoad(client: PoolClient, sessionId: string): Promise<Locke
   return { status: "ok", session: { sectionId, defs, run, nextN: (last.rows[0]?.n ?? 0) + 1 } };
 }
 
+/**
+ * The stored answers of this section's trace and prediction concepts. Server only: these go to
+ * the comparison and the leak check, never into an API response or an AI prompt.
+ */
+async function loadAnswers(client: PoolClient, sectionId: string): Promise<StoredAnswer[]> {
+  const { rows } = await client.query<{ concept_id: string; expected_answer: string }>(
+    `SELECT s.concept_id, s.expected_answer
+       FROM concept_secrets s JOIN concepts c ON c.id = s.concept_id
+      WHERE c.section_id = $1 AND s.expected_answer IS NOT NULL`,
+    [sectionId],
+  );
+  return rows.map((r) => ({ conceptId: r.concept_id, expectedAnswer: r.expected_answer }));
+}
+
 async function saveRun(client: PoolClient, sessionId: string, run: SessionRun): Promise<void> {
   for (const c of run.concepts) {
     await client.query(
@@ -279,7 +296,15 @@ export async function runTurn(
     const { defs, run, nextN } = locked.session;
 
     const nowMs = (turn.endedAt ?? new Date()).getTime();
-    const outcome = processTurn(defs, run, { text: turn.text, judge, nowMs });
+    const answers = await loadAnswers(client, locked.session.sectionId);
+    const answer = committedAnswer(turn.text, run, defs, answers);
+    const raw = processTurn(defs, run, { text: turn.text, judge, answer, nowMs });
+
+    // Leak check: no line may say a stored answer before the student has committed to one.
+    const guard = guardMove(raw.move, defs, answers, raw.session.committed);
+    if (guard.blocked.length > 0) console.warn(`leak check blocked a line about ${guard.blocked.join(", ")}`);
+    const spoken = guard.move.then ?? guard.move;
+    const outcome = { ...raw, move: guard.move, session: { ...raw.session, lastLine: spoken.line } };
     await saveRun(client, sessionId, outcome.session);
 
     await logRow(client, sessionId, {

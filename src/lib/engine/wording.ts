@@ -20,6 +20,9 @@ export const ALL_ASKED_PROPOSAL_LINE = "That's everything I wanted to ask. Ready
 export const LIMIT_PROPOSAL_LINE = "We've covered a lot. Ready to wrap up?";
 export const WRAP_UP_LINE = "Okay, let's wrap up.";
 
+// Spoken when the leak check blocks a line that would have said a stored answer.
+export const LEAK_FALLBACK_LINE = "Let's slow down. Can you walk me through it step by step?";
+
 export function wordCount(line: string): number {
   const trimmed = line.trim();
   return trimmed ? trimmed.split(/\s+/).length : 0;

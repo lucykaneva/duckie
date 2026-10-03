@@ -51,6 +51,15 @@ export const ENGINE = {
    * or a reply like "keep going" to a check-in.
    */
   shortTurnMaxWords: 3,
+
+  // Running a concept's reference code (B10). The code is written by the AI, so it runs in a locked-down child process.
+  /** The script is stopped after this long (an infinite loop). */
+  codeTimeoutMs: 1_000,
+  /** The whole child process is killed after this long, whatever it is doing. */
+  codeWallMs: 3_000,
+  codeMemoryMb: 64,
+  /** The answer, as JSON, may not be longer than this. */
+  codeMaxOutputChars: 2_000,
 };
 
 // Upload and extraction (B8). Not part of the rules spec; tune here, never in logic.
