@@ -199,7 +199,10 @@ describe("brake: two skips", () => {
 describe("brake: question streak", () => {
   it("makes the move after two back-to-back questions an open prompt", () => {
     const o1 = turn(freshSession(defs), "Binary search is about lists.", {
-      judge: { missed: [{ conceptId: "c_12" }] },
+      judge: {
+        covered: [{ conceptId: "c_13", quote: "Binary search is about lists" }],
+        missed: [{ conceptId: "c_12" }],
+      },
     });
     expect(o1.move.kind).toBe("question");
     const o2 = turn(o1.session, "the list thing");
@@ -215,7 +218,12 @@ describe("brake: question streak", () => {
   });
 
   it("resumes the ladder after the open prompt", () => {
-    let o = turn(freshSession(defs), "Binary search is about lists.", { judge: { missed: [{ conceptId: "c_12" }] } });
+    let o = turn(freshSession(defs), "Binary search is about lists.", {
+      judge: {
+        covered: [{ conceptId: "c_13", quote: "Binary search is about lists" }],
+        missed: [{ conceptId: "c_12" }],
+      },
+    });
     o = turn(o.session, "the list thing");
     o = turn(o.session, "the list thing");
     expect(o.move.kind).toBe("open");
@@ -244,7 +252,10 @@ describe("brake: question streak", () => {
 
   it("uses the configured streak length", () => {
     const o1 = turn(freshSession(defs), "Binary search is about lists.", {
-      judge: { missed: [{ conceptId: "c_12" }] },
+      judge: {
+        covered: [{ conceptId: "c_13", quote: "Binary search is about lists" }],
+        missed: [{ conceptId: "c_12" }],
+      },
       config: { ...DUCK, maxQuestionStreak: 1 },
     });
     const o2 = turn(o1.session, "the list thing", { config: { ...DUCK, maxQuestionStreak: 1 } });

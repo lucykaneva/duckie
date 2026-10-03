@@ -34,9 +34,11 @@ export const FILLER_WORD = /^(?:u+m+|u+h+m?)$/;
 /** Look like a filler but are answers or exclamations: "uh-huh", "uh-oh". */
 export const NOT_FILLER_PAIRS = /\buh[\s-]+(?:huh|oh)\b/g;
 
-/** Explicit requests to skip. Must not fire on "you skip the left half". */
+/** Explicit requests to skip. Must not fire on "you skip the left half" or "why do I want to skip". */
 export const MOVE_ON_PATTERNS: RegExp[] = [
-  /\b(?:let'?s|lets|can we|could we|shall we|i want to|i'd like to|i would like to|i'll|please|just)\s+(?:move on|skip)\b/,
+  /\b(?:let'?s|lets|can we|could we|shall we|i'd like to|i would like to|i'll|please|just)\s+(?:move on|skip)\b/,
+  // "I want to skip" is a request. "Why do I want to skip" is a complaint about the duck.
+  /(?<!\bwhy (?:do|would) )\bi want to\s+(?:move on|skip)\b/,
   /\bskip (?:this|that)\b/,
   /\bmove on from (?:this|that)\b/,
   // The whole turn is the request: "skip", "move on please", "okay next".
@@ -46,6 +48,23 @@ export const MOVE_ON_PATTERNS: RegExp[] = [
 /** A plain "yes": the answer to "Want to skip this one?". Whole turn only. */
 export const AFFIRMATIVE_PATTERN =
   /^(?:yes|yeah|yep|yup|sure|ok(?:ay)?|fine|please|go ahead|yes please|sure thing)[.!, ]*$/;
+
+/**
+ * Agreeing with a planted wrong claim ("My friend wrote lo = mid. Is that okay?").
+ * "I think that's fine?" is the spec's turn. Rejecting the claim ("no, that loops") must not match.
+ */
+export const PLANTED_AGREE_PATTERNS: RegExp[] = [
+  /\b(?:that(?:'s| is)|it(?:'s| is)) (?:fine|okay|ok|alright|all right)\b/,
+  /\b(?:that|it) should (?:be )?(?:fine|okay|ok|work)\b/,
+  /\bi think (?:that(?:'s| is)|it(?:'s| is)) (?:fine|okay|ok)\b/,
+  /^(?:yes|yeah|yep|yup|sure|ok(?:ay)?|fine)(?: it is| that is)?[.!? ]*$/,
+];
+
+export const PLANTED_REJECT_PATTERNS: RegExp[] = [
+  /\bnot (?:fine|okay|ok|alright)\b/,
+  /\b(?:no|nope|nah|wrong|incorrect)\b/,
+  /\b(?:loop|forever|never (?:move|stop|end))\b/,
+];
 
 /**
  * Asking for help. Not a struggle signal; the ladder starts these at L3.

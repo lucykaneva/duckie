@@ -112,6 +112,9 @@ CREATE TABLE turns (
   -- n numbers every logged row in the session. 'student' rows hold the student's words and the duck's reply;
   -- 'silence' rows are the duck's reply to a silence timer; 'steer' rows are the follow-up after a celebration.
   source TEXT NOT NULL DEFAULT 'student' CHECK (source IN ('student', 'silence', 'steer')),
+  -- How the line was produced (B11): whether the judge ran or fell back to code-only signals, whether wordMove's
+  -- line or the precomputed one was spoken, and whether the leak check replaced a line. Never holds an answer.
+  meta JSONB NOT NULL DEFAULT '{}'::jsonb,
   UNIQUE (session_id, n)
 );
 

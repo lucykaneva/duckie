@@ -62,7 +62,7 @@ Each concept from the slides keeps its own struggle score from 0 to 1. Signals a
 - **Success resets.** A correct prediction or an unaided explanation resets that concept's score to 0.
 - **Asking for help is not a struggle signal.** "Can you explain it?" is a request; handle it with the ladder in section 4.
 
-**How the code reads these signals (added by Dev B while building `src/lib/engine`; needs Angela's yes)**
+**How the code reads these signals (added by Dev B while building `src/lib/engine`; settled)**
 
 These choices fill gaps in the tables above. Getting them wrong causes real bugs, such as skipping a concept the student was only explaining.
 
@@ -107,7 +107,7 @@ The score picks how much help the duck gives, from a curious question up to a sh
 - **L4 always ends with teach-back.** The concept is never closed on the duck's explanation alone.
 - **At most 3 duck moves per concept,** then the duck offers to move on.
 
-**How the code runs the ladder** (added by Dev B in B7; needs Angela's yes). These are judgment calls the spec did not settle. Getting any of them wrong breaks the session, so they are fixed here and covered by `tests/ladder.test.ts` and `tests/turn.test.ts`.
+**How the code runs the ladder** (added by Dev B in B7; settled). These are judgment calls the spec did not settle. Getting any of them wrong breaks the session, so they are fixed here and covered by `tests/ladder.test.ts` and `tests/turn.test.ts`.
 
 - **Band edges are inclusive at the lower end.** A score of exactly 0.45 is L2, exactly 0.25 is L1, and so on. Scores are rounded to 6 decimals before the comparison so 0.3 + 0.15 is exactly 0.45.
 - **The duck climbs at most one level per move.** The first help move on a concept may reach L3 at most (L1 to L3 straight from L0 is fine). After that, one step up per move, even if the score jumps to L4's band. The student must always be asked something before being told something.
@@ -137,7 +137,7 @@ The brakes keep the duck from turning into an interrogation. They override every
 | Session length | At 8 minutes or 6 concepts, the duck proposes wrapping up; it never extends unasked |
 | AI unavailable | Use precomputed questions from the slide analysis; never improvise answers |
 
-**How the code runs the brakes** (added by Dev B in B9; needs Angela's yes). The table above leaves gaps. These are the choices the code makes, covered by `tests/brakes.test.ts`.
+**How the code runs the brakes** (added by Dev B in B9; settled). The table above leaves gaps. These are the choices the code makes, covered by `tests/brakes.test.ts`.
 
 - **"Back-to-back questions" means questions with nothing in between.** A content question or a rephrase counts. An acknowledgement ("Got it"), a celebration, an offer to skip, a check-in, an open prompt or a pause ends the run, and a question that follows an acknowledgement or celebration starts a new run. The worked example needs this: its turns 2, 3 and 4 are all questions, but turn 3 opens with "Got it."
 - **The open prompt does not use up a ladder move.** "What's the next piece of it?" stays on the same concept at the same level; the ladder carries on after it. It replaces only a question or rephrase, never an offer to skip.
@@ -174,14 +174,14 @@ Praise is rare and specific, so it means something. It follows Burrow's rule: ce
 - **Steer after success.** Wait until the duck's audio ends plus 1.5 s, then move to the next concept. A success is the best moment to move forward.
 - **Wrap-up.** One spoken sentence: the strongest moment and the one concept to revisit. The full results go to the on-screen debrief.
 
-**How the code applies the celebration table** (added by Dev B in B9; needs Angela's yes)
+**How the code applies the celebration table** (added by Dev B in B9; settled)
 
 - **"Caught a misconception or bug on their own" means the planted mistake, answered with no help.** A concept can carry a flag, `plants_misconception`, set when its opening question states a wrong claim ("My friend wrote `lo = mid`. Is that okay?"). If the student gets that right at L0 it is a real celebration even though there was no struggle. After any help it is only "Got it". Extraction sets the flag; the demo seed sets it on the update step.
 - **A celebration is its own move, and the next question follows 1.5 s later as a second move.** `/turn` returns the celebration with the follow-up in `then`. Dev A speaks the celebration, waits for the audio to end plus `DUCK.afterCelebrationMs`, then speaks `then.line`. The server has already counted the follow-up as asked.
 - **The line names the concept** ("Ooh, nice. You got when it stops.") until Dev A's `wordMove` writes a specific one ("Ooh, you caught the infinite loop"). A concept name too long to fit in 20 words falls back to "Ooh, nice. You got that one."
 - **After L4, the answer is always neutral,** even if the score had climbed far past 0.45.
 
-**How the code checks answers and runs the leak check** (added by Dev B in B10; needs Angela's yes). Covered by `tests/answers.test.ts` and `tests/run-code.test.ts`.
+**How the code checks answers and runs the leak check** (added by Dev B in B10; settled). Covered by `tests/answers.test.ts` and `tests/run-code.test.ts`.
 
 - **The true answer is computed once, at upload, by running the reference code.** Grok's own guess is only a first draft: the stored answer is whatever the code returns. The code runs in a separate process with no secrets, no network, no file access, a 1 second limit and a memory cap. If it fails, times out or returns something we cannot check, the concept becomes a plain explain question. The same happens if one of its own lines says the real answer.
 - **Only simple answers are checked:** a number, a list of numbers, a word or phrase, a list of those, or true/false.
@@ -215,6 +215,15 @@ Each successful recall doubles the interval, up to 30 days, following Burrow's r
 - After a new upload, invite once, not before 30 minutes have passed.
 - A dismissed invitation means no new one for 24 hours.
 - Quiet hours are set by the student; none by default, since students study late.
+
+**How one finished turn is orchestrated** (added by Dev B in B11). Covered by `tests/orchestrate.test.ts`.
+
+- **The order is fixed.** Code-readable signals and the committed-answer check first; then `judgeTurn`; then the engine; then `wordMove`; then the leak check. Code decides the move. Grok only reads structure and writes words.
+- **Each Grok call has a time limit.** If the judge is slow, down or unusable, the turn is scored with code-only signals and an empty judge. If wording is slow or rejected, the precomputed line is spoken. The duck never waits for a second chance beyond what `wordMove` already retries.
+- **The judge is skipped** when the engine will not score the turn: the session is closing, the student asked to wrap up or skip, a short reply to a check-in or skip offer, or "I'm back" after a pause.
+- **"Missed" only applies to explainable concepts.** A trace or prediction is something the duck tests later, a planted claim is a probe the duck brings up itself, and a check question that asks how many or already contains a number is a later quiz. Leaving those out of the explanation turn is not a miss.
+- **`wordMove` only rewords help questions, rephrases and celebrations.** Opening lines, L0 check questions, acknowledgements, brakes, proposals, pause and wrap-up stay as the engine wrote them.
+- **The leak check runs on whatever `wordMove` returned.** A leaking line is replaced; the student never hears it. The prompt is never given a stored answer.
 
 ## Config and AI rules
 

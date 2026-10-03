@@ -40,10 +40,11 @@ afterEach(() => {
 });
 
 describe("isWorded", () => {
-  it("rewords help questions, rephrases and celebrations", () => {
+  it("rewords help questions, rephrases, celebrations, and a reply to the student", () => {
     expect(isWorded({ kind: "question", level: "L1" })).toBe(true);
     expect(isWorded({ kind: "rephrase", level: "L3" })).toBe(true);
     expect(isWorded({ kind: "celebrate", level: "L0" })).toBe(true);
+    expect(isWorded({ kind: "open", level: "L0" })).toBe(true);
   });
 
   it("never rewords the opening check question or the rule-defined lines", () => {
@@ -184,8 +185,29 @@ describe("what Grok is sent", () => {
     expect(user.content).toContain("Concept: Sorted input (slide 4)");
     expect(user.content).toContain(FALLBACK);
     expect(user.content).toContain("You look at the middle and keep halving.");
+    expect(user.content).toMatch(/Intent of this move/);
     expect(user.content).toContain("Likes jokes.");
     expect(JSON.stringify(grok.bodies[0])).not.toMatch(/reference_code|expected_answer/);
+  });
+
+  it("tells Grok to reply to a greeting instead of reciting a quiz line", async () => {
+    const grok = fakeGrok(["Hi! What are you going to teach me?"]);
+    await wordMoveDetailed(
+      {
+        kind: "open",
+        level: "L0",
+        conceptName: "Sorted input",
+        topic: "Binary search",
+        studentWords: "Hello?",
+        fallbackLine: "Ooh! Can you explain it to me? I'm just a duck.",
+      },
+      { fetchImpl: grok.fetchImpl },
+    );
+    const user = grok.bodies[0].messages[1].content;
+    expect(user).toMatch(/Reply to what the student just said/);
+    expect(user).toContain("Hello?");
+    expect(user).toContain("Binary search");
+    expect(user).toMatch(/do not recite/);
   });
 
   it("cuts a very long student turn down to its end and flattens line breaks", async () => {

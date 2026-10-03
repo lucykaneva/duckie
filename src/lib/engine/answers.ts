@@ -233,6 +233,18 @@ const hasPhrase = (haystack: string, phrase: string): boolean => {
 };
 
 /**
+ * Numbers that are only named as missing ("6 is not in the list", "you will not have found 6")
+ * are the target, not extra values they claim they checked.
+ */
+function stripAbsentNumbers(text: string): string {
+  return text
+    .replace(/\bnot (?:have )?found\s+-?\d+(?:\.\d+)?\b/gi, " ")
+    .replace(/\b(?:did not|didn't|never)\s+find\s+-?\d+(?:\.\d+)?\b/gi, " ")
+    .replace(/\b-?\d+(?:\.\d+)?\s+(?:is not|isn'?t|was not|wasn'?t)\s+(?:in|there|found)\b/gi, " ")
+    .replace(/\b-?\d+(?:\.\d+)?\s+(?:does not|doesn't)\s+exist\b/gi, " ");
+}
+
+/**
  * Compare a spoken answer with the stored one.
  *
  * Numbers: the student must name exactly the right values, and name them in the right order. They may
@@ -249,7 +261,7 @@ export function compareAnswer(text: string, expectedJson: string): Verdict {
   if (!expected) return "none";
 
   if (expected.kind === "numbers") {
-    const said = numbersIn(text);
+    const said = numbersIn(stripAbsentNumbers(text));
     if (said.length === 0) return "none";
     const right = sameSet(said, expected.values) && isSubsequence(expected.values, said);
     return right ? "correct" : "wrong";

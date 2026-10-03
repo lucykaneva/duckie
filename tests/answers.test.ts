@@ -91,6 +91,12 @@ describe("comparing the student's answer", () => {
     );
     expect(compareAnswer("five and then seven", ANSWER)).toBe("correct");
     expect(compareAnswer("[5, 7]", ANSWER)).toBe("correct");
+    expect(
+      compareAnswer(
+        "So first you check 5, then you check 7, and then you see that you update the low and the high based on the 7, and then you see that low will equal to high, and you will not have found 6, so then you will return, you will end the loop and just say that 6 is not in the list.",
+        ANSWER,
+      ),
+    ).toBe("correct");
   });
 
   it("is wrong for the worked example's wrong answer (spec turn 4)", () => {

@@ -3,7 +3,9 @@ export const DUCK = {
   endOfTurnSilenceMs: 1_200,
   unfinishedThoughtWaitMs: 3_000,
   bargeInStopMs: 300,
-  fillerAfterMs: 1_500,
+  // Only if /turn is still going after this. Grok's judge+wording is usually 2–4 s, so 1.5 s
+  // made the duck say "Hmm, let me think" on every turn. 8 s is a stuck call, not a normal one.
+  fillerAfterMs: 8_000,
   maxDuckWords: 20,
 
   // signal weights (section 3)
@@ -92,7 +94,7 @@ export const EXTRACT = {
 // Grok text calls made by Dev A's prompt functions (src/lib/prompts). Tune here, never in logic.
 export const PROMPTS = {
   judgeModel: "grok-4.20-non-reasoning",
-  /** The judge shares the 1.5 s filler window with wording, so it gets little time. */
+  /** Judge timeout. Filler only plays if /turn is still going after DUCK.fillerAfterMs. */
   judgeTimeoutMs: 4_000,
   judgeMaxTokens: 700,
   /** A judge quote with fewer words than this is dropped: one word is too easy to match by accident. */

@@ -9,6 +9,8 @@ import {
   KEEP_GOING_PATTERNS,
   MOVE_ON_PATTERNS,
   NOT_FILLER_PAIRS,
+  PLANTED_AGREE_PATTERNS,
+  PLANTED_REJECT_PATTERNS,
   WRAP_UP_PATTERNS,
 } from "./phrases";
 
@@ -91,6 +93,18 @@ export function detectKeepGoing(text: string): boolean {
 /** A plain "yes" or "okay" (the whole turn). Only meaningful right after the duck offers to skip. */
 export function detectAffirmative(text: string): boolean {
   return AFFIRMATIVE_PATTERN.test(normalize(text));
+}
+
+/**
+ * The student agreed with a planted wrong claim. Only meaningful when the duck just asked one.
+ * Returns the student's words to use as the misconception quote, or null.
+ */
+export function plantedAgreementQuote(text: string): string | null {
+  const t = normalize(text);
+  if (PLANTED_REJECT_PATTERNS.some((pattern) => pattern.test(t))) return null;
+  if (!PLANTED_AGREE_PATTERNS.some((pattern) => pattern.test(t))) return null;
+  const trimmed = text.trim();
+  return trimmed || null;
 }
 
 /** "Can you explain it?" A request for help, never a struggle signal. */

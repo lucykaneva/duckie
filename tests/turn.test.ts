@@ -55,6 +55,13 @@ function sessionAt(id: string, overrides: Partial<SessionRun["concepts"][number]
 }
 
 describe("opening move", () => {
+  it("does not quiz when Grok has not seen them teach yet", () => {
+    const o = run(freshSession(defs), "Hello?", { judge: { missed: [{ conceptId: "c_12" }] } });
+    expect(o.move.kind).toBe("open");
+    expect(o.signals).toEqual([]);
+    expect(o.session.concepts.every((c) => c.score === 0 && c.moves === 0 && c.state === "not_yet")).toBe(true);
+  });
+
   it("opens with the spec's line and every concept Not yet", () => {
     const move = openingMove(defs);
     expect(move.kind).toBe("open");
@@ -183,7 +190,9 @@ describe("one move per turn", () => {
   });
 
   it("asks the next unasked concept in deck order when nothing is struggling", () => {
-    const o = run(freshSession(defs), "Binary search finds things in a sorted list.");
+    const o = run(freshSession(defs), "Binary search finds things in a sorted list.", {
+      judge: { covered: [{ conceptId: "c_13", quote: "Binary search finds things" }] },
+    });
     expect(o.move).toMatchObject({ kind: "question", level: "L0", conceptId: "c_12" });
     expect(o.move.line).toBe("Does binary search work on any list?");
   });
@@ -196,7 +205,9 @@ describe("one move per turn", () => {
   });
 
   it("counts every duck move on a concept, the opening check question included", () => {
-    const o = run(freshSession(defs), "Binary search finds things in a sorted list.");
+    const o = run(freshSession(defs), "Binary search finds things in a sorted list.", {
+      judge: { covered: [{ conceptId: "c_13", quote: "Binary search finds things" }] },
+    });
     expect(stateOf(o, "c_12").moves).toBe(1);
   });
 });
@@ -275,7 +286,10 @@ describe("the ladder in a session", () => {
   it("climbs L1, L2, L3, then L4 as the final move, then offers to move on (an open prompt breaks up the questions)", () => {
     // Explanation turn: only sorted input is missed -> L1.
     let o = run(freshSession(defs), "Binary search is about lists.", {
-      judge: { missed: [{ conceptId: "c_12" }] },
+      judge: {
+        covered: [{ conceptId: "c_13", quote: "Binary search is about lists" }],
+        missed: [{ conceptId: "c_12" }],
+      },
     });
     const seen = [o.move];
     // Five more turns that do not resolve it and show no new signals.

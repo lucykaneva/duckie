@@ -166,6 +166,25 @@ export function freshSession(defs: ConceptDef[], startedAtMs = 0): SessionRun {
   };
 }
 
+/** True until the student has actually started teaching (opening + "hello" do not count). */
+export function hasNotStartedTeaching(session: SessionRun): boolean {
+  return session.concepts.every((c) => c.moves === 0 && c.state === "not_yet" && c.score === 0);
+}
+
+/** Grok found they talked about the topic, or they committed a trace/prediction answer. */
+export function taughtThisTurn(
+  judge: JudgeResult,
+  answer?: { conceptId: string; correct: boolean },
+): boolean {
+  return (
+    judge.covered.length > 0 ||
+    judge.misconceptions.length > 0 ||
+    judge.contradictions.length > 0 ||
+    judge.vague.length > 0 ||
+    answer !== undefined
+  );
+}
+
 /** The first thing the duck says (returned by POST /api/sessions). */
 export function openingMove(defs: ConceptDef[]): DuckMove {
   return {
@@ -233,8 +252,8 @@ export function processTurn(
   const pausedMs = session.pausedMs + (wasPaused ? Math.max(0, nowMs - (session.pausedAtMs as number)) : 0);
   const activeMs = Math.max(0, nowMs - session.startedAtMs - pausedMs);
 
-  // "Missed" counts only when the student's explanation turn has ended: the first finished turn.
-  const explanationTurnEnded = session.turnCount === 0;
+  // "Missed" only after Grok sees they actually taught something. A hello is not a miss.
+  const explanationTurnEnded = hasNotStartedTeaching(session) && taughtThisTurn(input.judge, input.answer);
 
   const focusRun = concepts.find((c) => c.conceptId === session.focusConceptId);
   const focus = focusRun && isOpen(focusRun) ? focusRun : undefined;
@@ -273,6 +292,36 @@ export function processTurn(
 
   // 1. Already closing, or the student asks to wrap up.
   if (session.closing || detectWrapUpRequest(text)) return closeOutcome();
+
+  // 1b. They have not started teaching. Do not quiz; Grok replies to whatever they said.
+  if (
+    hasNotStartedTeaching(session) &&
+    !taughtThisTurn(input.judge, input.answer) &&
+    !detectMoveOn(text) &&
+    !detectHelpRequest(text)
+  ) {
+    const move: DuckMove = {
+      kind: "open",
+      level: "L0",
+      conceptId: fallbackConceptId,
+      line: OPENING_LINE,
+      sessionState: "active",
+      concepts: progress(concepts),
+    };
+    return {
+      session: {
+        ...carried(),
+        lastMoveKind: "open",
+        lastLine: OPENING_LINE,
+        pending: null,
+        questionStreak: 0,
+      },
+      move,
+      signals: [],
+      scoreAfter: 0,
+      resolved: [],
+    };
+  }
 
   // 2. An answer to a wrap-up proposal or to "Keep going or wrap up?".
   if (session.pending === "wrap_proposal" && detectAffirmative(text)) return closeOutcome();

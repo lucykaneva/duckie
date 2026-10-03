@@ -54,6 +54,8 @@ export class DuckSession {
   private silenceTimers: ReturnType<typeof setTimeout>[] = [];
   private idleWaiters: (() => void)[] = [];
   private ready: { resolve: () => void; reject: (error: Error) => void } | null = null;
+  private lastStudentText: string | null = null;
+  private lastStudentAt = 0;
 
   constructor(
     private options: DuckSessionOptions,
@@ -145,6 +147,13 @@ export class DuckSession {
 
   private onStudentSpeechStart() {
     if (this.state === "ended") return;
+    // Breath, echo, or the same sentence finalizing again must not cancel an in-flight /turn.
+    // A real new utterance is handled in onTurn.
+    if (this.state === "thinking") {
+      this.clearSilenceTimers();
+      this.clearFiller();
+      return;
+    }
     this.turnSeq++; // anything the server is still working on is now out of date
     this.clearSilenceTimers();
     this.clearFiller();
@@ -166,6 +175,15 @@ export class DuckSession {
 
   private async onTurn(turn: StudentTurn) {
     if (!this.sessionId || this.state === "ended") return;
+    const normalized = turn.text.trim().toLowerCase();
+    const echoed =
+      this.lastStudentText !== null &&
+      this.lastStudentText === normalized &&
+      Date.now() - this.lastStudentAt < 5_000;
+    if (echoed) return;
+    if (this.state === "thinking") this.turnSeq++;
+    this.lastStudentText = normalized;
+    this.lastStudentAt = Date.now();
     this.awaitingAnswer = false;
     const sessionId = this.sessionId;
     const seq = this.turnSeq;

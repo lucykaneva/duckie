@@ -1,5 +1,4 @@
 import { runTurn } from "@/lib/db/sessions";
-import { emptyJudgeResult } from "@/lib/engine/stub-judge";
 
 function parseDate(value: unknown): Date | null {
   if (typeof value !== "string") return null;
@@ -24,12 +23,12 @@ export async function POST(
   }
 
   try {
-    // B7: the judge is stubbed to an empty result. B11 swaps in Dev A's judgeTurn.
-    const result = await runTurn(
-      id,
-      { text, startedAt: parseDate(body?.startedAt), endedAt: parseDate(body?.endedAt) },
-      emptyJudgeResult(),
-    );
+    // B11: judge, engine, wording and the leak check, with a time limit on each Grok call.
+    const result = await runTurn(id, {
+      text,
+      startedAt: parseDate(body?.startedAt),
+      endedAt: parseDate(body?.endedAt),
+    });
     if (result.status === "not_found") {
       return Response.json({ error: "Session not found" }, { status: 404 });
     }

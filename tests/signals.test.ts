@@ -140,6 +140,8 @@ describe("move on", () => {
     "If it's too big you skip everything above mid",
     "It moves on to the right half",
     "Then it will move on to the next element",
+    "I don't want to skip it",
+    "Wait, no, but I got it right! Why would you want to, why do I want to skip it?",
     "",
   ])("does not fire while explaining: %j", (text) => {
     expect(detectMoveOn(text)).toBe(false);

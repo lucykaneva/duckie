@@ -1,13 +1,18 @@
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
-import type { DuckMove, JudgeResult, Level, MoveKind } from "../duck/types";
-import { committedAnswer } from "../engine/commit";
-import { guardMove } from "../engine/guard";
+import type { DuckMove, Level, MoveKind } from "../duck/types";
 import type { StoredAnswer } from "../engine/guard";
-import { processSilence, silenceStepFor } from "../engine/silence";
-import { processTurn, freshSession, openingMove } from "../engine/turn";
+import { orchestrateSilence, orchestrateTurn } from "../engine/orchestrate";
+import type { OrchestrateDeps, TurnMeta } from "../engine/orchestrate";
+import { silenceStepFor } from "../engine/silence";
+import { freshSession, openingMove } from "../engine/turn";
 import type { ConceptDef, ConceptRun, SessionRun } from "../engine/turn";
+import { judgeTurn } from "../prompts/judgeTurn";
+import { wordMoveDetailed } from "../prompts/wordMove";
 import { getPool } from "./client";
+
+/** The real Grok calls. Tests pass fakes. */
+export const liveDeps: OrchestrateDeps = { judge: judgeTurn, word: wordMoveDetailed };
 
 // Loads a session's state, runs the engine on one event (a finished student turn or a
 // silence timer), and saves the result. The session row is locked for the whole event
@@ -250,14 +255,15 @@ interface LogRow {
   signals: string[];
   scoreAfter: number | null;
   move: Pick<DuckMove, "level" | "kind" | "line" | "conceptId">;
+  meta?: TurnMeta;
 }
 
 /** One row of the decision log. signals and score_after describe what the student's words were judged against. */
 async function logRow(client: PoolClient, sessionId: string, row: LogRow): Promise<void> {
   await client.query(
     `INSERT INTO turns
-       (id, session_id, n, text, started_at, ended_at, signals, score_after, level, move_kind, line, concept_id, source)
-     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13)`,
+       (id, session_id, n, text, started_at, ended_at, signals, score_after, level, move_kind, line, concept_id, source, meta)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14::jsonb)`,
     [
       `t_${sessionId}_${row.n}`,
       sessionId,
@@ -272,6 +278,7 @@ async function logRow(client: PoolClient, sessionId: string, row: LogRow): Promi
       row.move.line,
       row.move.conceptId || null,
       row.source,
+      JSON.stringify(row.meta ?? {}),
     ],
   );
 }
@@ -279,11 +286,15 @@ async function logRow(client: PoolClient, sessionId: string, row: LogRow): Promi
 /**
  * Evaluate one finished student turn and save everything it changed: the concept
  * states, the engine state and the log rows (the turn, plus the follow-up after a celebration).
+ *
+ * The Grok calls (judge, then wording) happen while the session row is locked, so a silence timer that
+ * fires meanwhile waits for this turn instead of acting on state that is about to change. Both calls
+ * have time limits, so the lock is held for a few seconds at most.
  */
 export async function runTurn(
   sessionId: string,
   turn: { text: string; startedAt: Date | null; endedAt: Date | null },
-  judge: JudgeResult,
+  deps: OrchestrateDeps = liveDeps,
 ): Promise<TurnResult> {
   const client = await getPool().connect();
   try {
@@ -295,16 +306,12 @@ export async function runTurn(
     }
     const { defs, run, nextN } = locked.session;
 
-    const nowMs = (turn.endedAt ?? new Date()).getTime();
     const answers = await loadAnswers(client, locked.session.sectionId);
-    const answer = committedAnswer(turn.text, run, defs, answers);
-    const raw = processTurn(defs, run, { text: turn.text, judge, answer, nowMs });
-
-    // Leak check: no line may say a stored answer before the student has committed to one.
-    const guard = guardMove(raw.move, defs, answers, raw.session.committed);
-    if (guard.blocked.length > 0) console.warn(`leak check blocked a line about ${guard.blocked.join(", ")}`);
-    const spoken = guard.move.then ?? guard.move;
-    const outcome = { ...raw, move: guard.move, session: { ...raw.session, lastLine: spoken.line } };
+    const { outcome, meta } = await orchestrateTurn(
+      { defs, run, answers, text: turn.text, nowMs: (turn.endedAt ?? new Date()).getTime() },
+      deps,
+    );
+    if (meta.leakBlocked.length > 0) console.warn(`leak check blocked a line about ${meta.leakBlocked.join(", ")}`);
     await saveRun(client, sessionId, outcome.session);
 
     await logRow(client, sessionId, {
@@ -316,6 +323,7 @@ export async function runTurn(
       signals: outcome.signals,
       scoreAfter: outcome.scoreAfter,
       move: outcome.move,
+      meta,
     });
     if (outcome.move.then) {
       await logRow(client, sessionId, {
@@ -339,7 +347,11 @@ export async function runTurn(
 }
 
 /** Handle a silence timer (8, 20 or 45 s after the duck's last line). */
-export async function runSilence(sessionId: string, ms: number): Promise<SilenceResult> {
+export async function runSilence(
+  sessionId: string,
+  ms: number,
+  deps: OrchestrateDeps = liveDeps,
+): Promise<SilenceResult> {
   const step = silenceStepFor(ms);
   if (step === null) return { status: "too_short" };
 
@@ -351,9 +363,10 @@ export async function runSilence(sessionId: string, ms: number): Promise<Silence
       await client.query("ROLLBACK");
       return locked;
     }
-    const { run, nextN } = locked.session;
+    const { defs, run, nextN } = locked.session;
 
-    const outcome = processSilence(run, step, Date.now());
+    const answers = await loadAnswers(client, locked.session.sectionId);
+    const outcome = await orchestrateSilence({ defs, run, answers, step, nowMs: Date.now() }, deps);
     if (!outcome) {
       await client.query("ROLLBACK");
       return { status: "stale" };
@@ -366,6 +379,7 @@ export async function runSilence(sessionId: string, ms: number): Promise<Silence
       signals: outcome.signals,
       scoreAfter: outcome.scoreAfter,
       move: outcome.move,
+      meta: outcome.meta,
     });
 
     await client.query("COMMIT");

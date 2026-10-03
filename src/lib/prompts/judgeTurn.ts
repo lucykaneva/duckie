@@ -10,6 +10,8 @@ export interface JudgeInput {
   text: string;
   concepts: ConceptForJudge[];
   explanationTurnEnded: boolean;
+  /** The duck's last line. A short reply like "that's fine" is about this, not a new explanation. */
+  duckAsked?: { conceptId: string; line: string; plantsMisconception?: boolean };
 }
 
 export interface JudgeOptions {
@@ -40,6 +42,7 @@ Rules:
 - A quote belongs to the one concept it is about. Do not reuse a quote for several concepts unless it really is about each.
 - When unsure, use null. A few certain items are better than many guesses.
 - Use only the conceptId values you are given.
+- If you are told the duck just asked a planted wrong claim and the student agrees ("that's fine", "yes", "that should work") without correcting it, that is a misconception for that concept. Quote the student's words. A correction ("no, that loops") is covered, not a misconception.
 
 Example (a different topic). Concepts: c_1 "Sunlight", c_2 "Chlorophyll" (known misconception: "plants eat soil"), c_3 "Stomata".
 Student: "Plants make food from light. They mostly eat soil I think, and the green stuff is somehow involved."
@@ -120,6 +123,15 @@ export async function judgeTurn(input: JudgeInput, options: JudgeOptions = {}): 
           explanationTurnEnded: input.explanationTurnEnded,
           concepts: input.concepts.map(({ id, name, misconceptions }) => ({ id, name, misconceptions })),
           studentText: input.text,
+          ...(input.duckAsked
+            ? {
+                duckJustAsked: {
+                  conceptId: input.duckAsked.conceptId,
+                  line: input.duckAsked.line,
+                  plantedWrongClaim: input.duckAsked.plantsMisconception === true,
+                },
+              }
+            : {}),
         }),
       },
     ],
