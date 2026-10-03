@@ -43,6 +43,10 @@ export const MOVE_ON_PATTERNS: RegExp[] = [
   /^(?:ok(?:ay)?[,. ]+)?(?:skip|move on|next)(?: please)?[.!]*$/,
 ];
 
+/** A plain "yes": the answer to "Want to skip this one?". Whole turn only. */
+export const AFFIRMATIVE_PATTERN =
+  /^(?:yes|yeah|yep|yup|sure|ok(?:ay)?|fine|please|go ahead|yes please|sure thing)[.!, ]*$/;
+
 /**
  * Asking for help. Not a struggle signal; the ladder starts these at L3.
  * Second person only, so "let me explain it" (the student teaching) is not a request.

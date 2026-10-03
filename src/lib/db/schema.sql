@@ -88,6 +88,8 @@ CREATE TABLE turns (
   level TEXT,
   move_kind TEXT,
   line TEXT,
+  -- The concept the duck's move was about. The next turn starts from it (B7).
+  concept_id TEXT REFERENCES concepts (id),
   UNIQUE (session_id, n)
 );
 

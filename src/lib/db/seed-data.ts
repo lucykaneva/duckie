@@ -2,7 +2,8 @@
 // Ids match the API stubs (course_1, sec_1, c_12 = "Sorted input").
 // Slide numbers 4 and 7 come from the spec; the others are placeholders until
 // the real deck is uploaded. Fallback lines are drafts: each is 20 words or
-// fewer with at most one question and never states an answer.
+// fewer with at most one question. L1 to L3 never state an answer. L4 is the
+// short explanation plus teach-back question, used when the AI is unavailable.
 
 export interface SeedConcept {
   id: string;
@@ -12,7 +13,7 @@ export interface SeedConcept {
   kind: "explain" | "trace" | "predict";
   misconceptions: string[];
   checkPrompt: string;
-  fallbackQuestions: { L1: string; L2: string; L3: string };
+  fallbackQuestions: { L1: string; L2: string; L3: string; L4: string };
   /** Server only. Goes to concept_secrets, never to an API response. */
   secret?: { referenceCode: string; expectedAnswer: string };
 }
@@ -57,6 +58,7 @@ export const SEED_CONCEPTS: SeedConcept[] = [
       L1: "So I could use it on my pebbles? They're all mixed up.",
       L2: "Slide 4 says something about order. What does it say?",
       L3: "Try it with 9, 2, 5, looking for 2. Does halving still make sense?",
+      L4: "It only works on sorted lists, so halving can safely drop one side. Can you say why?",
     },
   },
   {
@@ -71,6 +73,7 @@ export const SEED_CONCEPTS: SeedConcept[] = [
       L1: "Why not just look at every item one by one?",
       L2: "Slide 5 shows the list shrinking. What happens to it each step?",
       L3: "Say there are 8 items. How many are left after one check?",
+      L4: "Each check throws away half the list. Can you say that back in your words?",
     },
   },
   {
@@ -80,11 +83,12 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     slide: 7,
     kind: "trace",
     misconceptions: [],
-    checkPrompt: "1, 3, 5, 7, 9, looking for 6. Which numbers do you check?",
+    checkPrompt: "Test me: 1, 3, 5, 7, 9, looking for 6. Which numbers do you check?",
     fallbackQuestions: {
       L1: "What if the thing I want isn't in the list at all?",
       L2: "Slide 7 shows when it stops. What has to be true to stop?",
       L3: "Try the list 2, 4 looking for 3. When do you stop?",
+      L4: "It stops when nothing is left to search, or it finds the target. Can you say that back?",
     },
     secret: { referenceCode: TRACE_REFERENCE_CODE, expectedAnswer: "[5,7]" },
   },
@@ -100,6 +104,7 @@ export const SEED_CONCEPTS: SeedConcept[] = [
       L1: "What happens to lo when it's right next to hi?",
       L2: "Slide 9 shows the update step. What does it set lo to?",
       L3: "Try lo = 3 and hi = 4. What happens if lo = mid?",
+      L4: "lo has to become mid + 1, or it can loop forever. Can you say why?",
     },
   },
   {
@@ -114,6 +119,7 @@ export const SEED_CONCEPTS: SeedConcept[] = [
       L1: "Is it much faster than going one by one?",
       L2: "Slide 11 compares the number of checks. What does it say?",
       L3: "Say 8 items. How many times can you halve it before one is left?",
+      L4: "Halving means about twenty checks for a million items. Can you say why?",
     },
   },
 ];

@@ -30,11 +30,15 @@ async function migrate() {
     throw new Error("DATABASE_URL is not set (add it to .env or .env.local)");
   }
 
-  const schemaPath = path.join(process.cwd(), "src/lib/db/schema.sql");
+  // No argument: build the whole schema. With a path: run just that SQL file.
+  const file = process.argv[2] ?? "src/lib/db/schema.sql";
+  const schemaPath = path.resolve(process.cwd(), file);
   const sql = readFileSync(schemaPath, "utf8");
+  // Strip comments first so a ";" inside a comment cannot split a statement.
   const statements = sql
+    .replace(/--[^\n]*/g, "")
     .split(";")
-    .map((statement) => statement.replace(/--[^\n]*/g, "").trim())
+    .map((statement) => statement.trim())
     .filter(Boolean);
 
   // Tiger Cloud's cert chain is not in Node's trust store. Use libpq semantics

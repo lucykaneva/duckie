@@ -22,9 +22,24 @@ describe("demo seed", () => {
     expect(new Set(SEED_CONCEPTS.map((c) => c.id)).size).toBe(5);
   });
 
-  it("has L1 to L3 fallback lines for every concept", () => {
+  it("has L1 to L4 fallback lines for every concept", () => {
     for (const c of SEED_CONCEPTS) {
-      expect(Object.keys(c.fallbackQuestions)).toEqual(["L1", "L2", "L3"]);
+      expect(Object.keys(c.fallbackQuestions)).toEqual(["L1", "L2", "L3", "L4"]);
+    }
+  });
+
+  it("ends every L4 line with the teach-back question", () => {
+    for (const c of SEED_CONCEPTS) {
+      expect(c.fallbackQuestions.L4.trim().endsWith("?")).toBe(true);
+    }
+  });
+
+  it("keeps check prompts within the duck's limits, with the ack in front", () => {
+    for (const c of SEED_CONCEPTS) {
+      // "Okay, that makes sense now." (5 words) can sit in front of any check prompt
+      const words = `Okay, that makes sense now. ${c.checkPrompt}`.split(/\s+/).length;
+      expect(words).toBeLessThanOrEqual(DUCK.maxDuckWords);
+      expect((c.checkPrompt.match(/\?/g) ?? []).length).toBe(1);
     }
   });
 

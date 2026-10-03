@@ -107,6 +107,21 @@ The score picks how much help the duck gives, from a curious question up to a sh
 - **L4 always ends with teach-back.** The concept is never closed on the duck's explanation alone.
 - **At most 3 duck moves per concept,** then the duck offers to move on.
 
+**How the code runs the ladder** (added by Dev B in B7; needs Angela's yes). These are judgment calls the spec did not settle. Getting any of them wrong breaks the session, so they are fixed here and covered by `tests/ladder.test.ts` and `tests/turn.test.ts`.
+
+- **Band edges are inclusive at the lower end.** A score of exactly 0.45 is L2, exactly 0.25 is L1, and so on. Scores are rounded to 6 decimals before the comparison so 0.3 + 0.15 is exactly 0.45.
+- **The duck climbs at most one level per move.** The first help move on a concept may reach L3 at most (L1 to L3 straight from L0 is fine). After that, one step up per move, even if the score jumps to L4's band. The student must always be asked something before being told something.
+- **A failed attempt after help always climbs.** Once the duck has given help (L1 or higher), a wrong answer moves it at least one level up, even when the score band is lower. After the opening check question (L0) the score band decides the first level. The ladder never goes down within a concept.
+- **L4 needs a real attempt.** It is allowed only when the score is in the L4 band (0.8 or more) or after `failedAttemptsForL4` failed attempts. A request for help is not an attempt and never counts toward this.
+- **A request for help goes to L3 from below it,** and does not count as a failed attempt. Asking again at L3 or higher just continues the ladder.
+- **Misconceptions never sit at L0.** A misconception raises the floor to L1, whatever the score.
+- **The 3-move cap counts every duck move on the concept,** including the first check question (L0). **L4 is exempt from the cap:** a student who got to L4 has not yet been explained to, so the duck gives the explanation and teach-back question first, and offers to skip only after that.
+- **The duck never moves on by itself.** After the ladder is used up it says "Want to skip this one?" and waits. It moves on only if the student then says a plain yes (yes, yeah, okay, sure, go ahead), or says they want to move on at any time. Anything else, including "I don't know", keeps the offer open.
+- **Resolved wins over struggling.** If the student answers correctly in the same turn that also contains hedging or fillers, the concept is resolved and the score resets to 0. The state is Owned if the concept was never helped, Assisted after L1 to L3, Explained to after L4. Whether the struggle was earned (score reached `earnedScore` before the success) is recorded for the debrief.
+- **Every concept in the section is scored on every turn,** not only the one being asked about. A student who covers a later concept while answering an earlier one gets it recognised (Owned) and is not asked about it again.
+- **L4 with the AI down:** each concept stores a short explanation plus teach-back question in `fallback_questions.L4`, written at extraction and by hand in the demo seed. The duck is never left without an L4 line.
+- **Which line is used.** L1 to L4 and the opening check question come from `fallback_questions` and `check_prompt` until wording is wired in (B11). The AI's wording replaces them only when it passes the line limits and the leak check.
+
 ## Brakes
 
 The brakes keep the duck from turning into an interrogation. They override every level in section 4.

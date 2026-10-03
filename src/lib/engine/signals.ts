@@ -1,6 +1,7 @@
 import { DUCK } from "../duck/config";
 import type { DuckConfig } from "../duck/config";
 import {
+  AFFIRMATIVE_PATTERN,
   DONT_KNOW_PATTERNS,
   FILLER_WORD,
   HEDGE_PATTERNS,
@@ -71,6 +72,11 @@ export function detectHeavyFillers(text: string, config: TextSignalConfig = DUCK
 export function detectMoveOn(text: string): boolean {
   const t = normalize(text);
   return MOVE_ON_PATTERNS.some((pattern) => pattern.test(t));
+}
+
+/** A plain "yes" or "okay" (the whole turn). Only meaningful right after the duck offers to skip. */
+export function detectAffirmative(text: string): boolean {
+  return AFFIRMATIVE_PATTERN.test(normalize(text));
 }
 
 /** "Can you explain it?" A request for help, never a struggle signal. */

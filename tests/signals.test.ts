@@ -4,6 +4,7 @@ import {
   countFillers,
   countHedges,
   countWords,
+  detectAffirmative,
   detectDontKnow,
   detectHedging,
   detectHeavyFillers,
@@ -181,4 +182,17 @@ describe("detectTextSignals", () => {
   it("is empty for a clean explanation", () => {
     expect(detectTextSignals("You look at the middle and keep halving the list")).toEqual([]);
   });
+});
+
+describe("a plain yes", () => {
+  it.each(["yes", "Yeah.", "okay", "Sure!", "yes please", "go ahead"])("%j is a yes", (text) => {
+    expect(detectAffirmative(text)).toBe(true);
+  });
+
+  it.each(["yes it halves the list", "no", "maybe", "okay so it halves", ""])(
+    "%j is not a plain yes",
+    (text) => {
+      expect(detectAffirmative(text)).toBe(false);
+    },
+  );
 });
