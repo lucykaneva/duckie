@@ -1,26 +1,149 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+  Study Duck tokens.
+  next/font sets --font-geist-sans and --font-fredoka on <html>.
+  --font-sans and --font-display are the names to use in UI.
+*/
+@theme {
+  --color-bg: #e4e3df;
+  --color-surface: #ffffff;
+  --color-ink: #1d1d1f;
+  --color-ink-muted: #5c5b57;
+  --color-border: #d4d2cb;
+  --color-border-strong: #b8b5ac;
+  --color-brand: #f5c518;
+  --color-brand-ink: #3d2e00;
+  --color-brand-soft: #fcefb4;
+  --color-duck-gold: #e8b028;
+  --color-duck-beak: #f08838;
+  --color-duck-outline: #2a2a2a;
+
+  --color-state-grey-bg: #f1f3f4;
+  --color-state-grey-fg: #5f6368;
+  --color-state-green-bg: #e6f4ea;
+  --color-state-green-fg: #1e7b45;
+  --color-state-yellow-bg: #fff4d6;
+  --color-state-yellow-fg: #8a6100;
+  --color-state-red-bg: #fce8e6;
+  --color-state-red-fg: #b3261e;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fredoka), ui-sans-serif, system-ui, sans-serif;
+
+  --radius: 14px;
+  --radius-card: 14px;
+  --radius-pill: 999px;
+
+  --shadow-*: initial;
+  --shadow-lg: 0 16px 40px rgb(29 29 31 / 0.16);
+
+  --default-transition-duration: 150ms;
+  --default-transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+
+  --max-width-content: 760px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+@utility text-display {
+  font-family: var(--font-display);
+  font-size: 64px;
+  line-height: 68px;
+  font-weight: 600;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+@utility text-title {
+  font-family: var(--font-display);
+  font-size: 32px;
+  line-height: 36px;
+  font-weight: 600;
+}
+
+@utility text-section {
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 600;
+}
+
+@utility text-lead {
+  font-family: var(--font-sans);
+  font-size: 19px;
+  line-height: 30px;
+  font-weight: 400;
+  color: var(--color-ink-muted);
+}
+
+@utility text-body {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 26px;
+  font-weight: 400;
+}
+
+@utility text-small {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 400;
+}
+
+@utility text-label {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+html {
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 26px;
+  font-weight: 400;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+textarea,
+select {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  transition:
+    border-color 150ms ease-out,
+    box-shadow 150ms ease-out;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  border-color: var(--color-ink);
+  box-shadow: 0 0 0 3px var(--color-brand-soft);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"])[aria-invalid="true"],
+textarea[aria-invalid="true"],
+select[aria-invalid="true"] {
+  border-color: var(--color-state-red-fg);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"])[aria-invalid="true"]:focus-visible,
+textarea[aria-invalid="true"]:focus-visible,
+select[aria-invalid="true"]:focus-visible {
+  border-color: var(--color-ink);
+  box-shadow: 0 0 0 3px var(--color-brand-soft);
 }

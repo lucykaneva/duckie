@@ -1,0 +1,112 @@
+.page {
+  --bg: #f1f0ec;
+  --ink: #1d1d1f;
+  --ink-quiet: #5c5b57;
+  width: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+/* Tall track: the sticky stage stays pinned while scrolling disperses the particles. */
+.hero {
+  position: relative;
+  height: 220vh;
+}
+
+.stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100svh;
+  overflow: hidden;
+}
+
+.stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.copy {
+  position: absolute;
+  z-index: 1;
+  left: clamp(16px, 7vw, 120px);
+  top: 50%;
+  transform: translateY(-50%);
+  max-width: 40rem;
+  pointer-events: none;
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-quiet);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(38px, 4.8vw, 72px);
+  line-height: 1.08;
+  letter-spacing: -0.005em;
+}
+
+.lede {
+  margin: 20px 0 0;
+  font-size: clamp(16px, 1.3vw, 19px);
+  line-height: 1.5;
+  color: var(--ink-quiet);
+  max-width: 24rem;
+}
+
+.scrollHint {
+  position: absolute;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-quiet);
+}
+
+.next {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 18vh 16px 30vh;
+}
+
+.next h2 {
+  margin: 0 0 16px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(32px, 4vw, 52px);
+  line-height: 1.1;
+}
+
+.next p {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--ink-quiet);
+}
+
+@media (max-width: 900px) {
+  .copy {
+    top: 12vh;
+    transform: none;
+    right: 16px;
+    text-align: center;
+    max-width: none;
+  }
+  .lede {
+    margin-inline: auto;
+  }
+}
