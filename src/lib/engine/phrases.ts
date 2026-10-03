@@ -45,6 +45,9 @@ export const MOVE_ON_PATTERNS: RegExp[] = [
   /^(?:ok(?:ay)?[,. ]+)?(?:skip|move on|next)(?: please)?[.!]*$/,
 ];
 
+/** "You're asking me want to skip this one": a complaint about the duck, not a request to skip. */
+export const COMPLAINT_ABOUT_DUCK = /\b(?:you'?re|you are|why are you|why do you|why did you) (?:asking|offering|saying|making)\b/;
+
 /** A plain "yes": the answer to "Want to skip this one?". Whole turn only. */
 export const AFFIRMATIVE_PATTERN =
   /^(?:yes|yeah|yep|yup|sure|ok(?:ay)?|fine|please|go ahead|yes please|sure thing)[.!, ]*$/;
@@ -107,7 +110,9 @@ export const CLARIFY_PATTERNS: RegExp[] = [
   /\bcome again\b/,
   /^(?:sorry|pardon|huh|what)[?.! ]*$/,
   // "What's a pebble?": a bare question about one or two words.
-  /^(?:and )?what(?:'s| is| are) (?:a |an |the |my )?[a-z']+(?: [a-z']+)?\??$/,
+  /^(?:and )?what(?:'s| is| are) (?:a |an |the |my )?[a-z']+(?: [a-z']+){0,3}\??$/,
+  // "I'm not sure what a sorted input is": they are asking about the duck's own words.
+  /\b(?:not sure|unsure|don'?t know|no idea|don'?t understand|confused about) what (?:an? |the )?[a-z' ]{1,30}? (?:is|means|are)\b/,
 ];
 
 /** A question the duck cannot answer: it has a question mark, or starts like one. */

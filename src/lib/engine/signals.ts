@@ -3,6 +3,7 @@ import type { DuckConfig } from "../duck/config";
 import {
   AFFIRMATIVE_PATTERN,
   CLARIFY_PATTERNS,
+  COMPLAINT_ABOUT_DUCK,
   EXPLAIN_REQUEST_PATTERNS,
   DONT_KNOW_PATTERNS,
   FILLER_WORD,
@@ -78,6 +79,7 @@ export function detectHeavyFillers(text: string, config: TextSignalConfig = DUCK
 /** "Let's move on", "skip this one". Not "then you skip the left half". */
 export function detectMoveOn(text: string): boolean {
   const t = normalize(text);
+  if (COMPLAINT_ABOUT_DUCK.test(t)) return false;
   return MOVE_ON_PATTERNS.some((pattern) => pattern.test(t));
 }
 

@@ -300,7 +300,8 @@ async function wordAndGuard(
       situation: conversationSituation(context.defs, context.run, context.judge),
       lastDuckLine: context.run.lastLine,
       ...(wasWrong && (m.kind === "question" || m.kind === "rephrase") ? { studentWas: "wrong" as const } : {}),
-      ...(asked && m.kind !== "celebrate" ? { studentAsked: asked } : {}),
+      // Before they have taught anything, "can you explain?" is about the duck's own words: explain them.
+      ...(asked && m.kind !== "celebrate" ? { studentAsked: m.kind === "open" ? ("clarify" as const) : asked } : {}),
     });
     words.push({
       source: result.source,

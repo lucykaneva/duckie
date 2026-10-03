@@ -321,7 +321,9 @@ export function processTurn(
     hasNotStartedTeaching(session) &&
     !taughtThisTurn(input.judge, input.answer) &&
     !detectMoveOn(text) &&
-    !detectHelpRequest(text)
+    // A "can you explain?" before they have taught anything is answered by explaining the duck's own words
+    // (wordMove, from the "open" move), not by jumping into a quiz question.
+    (!detectHelpRequest(text) || detectClarification(text) || detectExplainRequest(text))
   ) {
     const move: DuckMove = {
       kind: "open",
@@ -575,6 +577,17 @@ export function processTurn(
       helpLine(c, "L4") !== undefined;
     const level: Level = explainFirst || explainNow ? "L4" : requested;
     const line = helpLine(c, level);
+    // The ladder is used up, but the student is asking for an example or help: they get it a few more times
+    // (a different tiny case) before the duck offers to skip. Offering to skip to someone who asked for help is wrong.
+    const smallCase = helpLine(c, "L3");
+    if (
+      askedForHelp &&
+      smallCase !== undefined &&
+      (c.levelReached === "L4" || (capReached && level !== "L4")) &&
+      c.moves < config.maxMovesPerConcept + ENGINE.helpRequestMovesBeyondCap
+    ) {
+      return { kind: "question", level: "L3", line: smallCase, concept: c, help: true, sessionState: "active" };
+    }
     const usedUp =
       c.levelReached === "L4" ||
       (c.moves >= config.maxMovesPerConcept && level !== "L4");

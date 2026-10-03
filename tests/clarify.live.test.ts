@@ -68,6 +68,55 @@ const CASES: Array<{ label: string; input: WordMoveInput; mustNotMatch?: RegExp 
     },
     mustNotMatch: /can you explain|^no\b/i,
   },
+  {
+    label: "session: 'Are you stupid?' (open)",
+    input: {
+      ...BASE,
+      kind: "open",
+      level: "L0",
+      studentWords: "Are you stupid?",
+      lastDuckLine: "Ooh! Can you explain it to me? I'm just a duck.",
+      fallbackLine: "Ooh! Can you explain it to me? I'm just a duck.",
+    },
+    mustNotMatch: /stupid/i,
+  },
+  {
+    label: "session: not sure what sorted input is (open)",
+    input: {
+      ...BASE,
+      kind: "open",
+      level: "L0",
+      studentAsked: "clarify",
+      studentWords: "I am not sure what a sorted input is. Can you explain?",
+      lastDuckLine: "Ooh, can you explain sorted input to me?",
+      fallbackLine: "Ooh! Can you explain it to me? I'm just a duck.",
+    },
+    mustNotMatch: /^(?:can you explain|what do you mean)/i,
+  },
+  {
+    label: "session: 'Yeah.' (L1 question)",
+    input: {
+      ...BASE,
+      kind: "question",
+      level: "L1",
+      studentWords: "Yeah.",
+      lastDuckLine: "Oh. So when does it stop then?",
+      fallbackLine: "What happens to lo when it's right next to hi?",
+    },
+    mustNotMatch: /^yeah/i,
+  },
+  {
+    label: "session: wrong trace then open prompt",
+    input: {
+      ...BASE,
+      kind: "open",
+      level: "L0",
+      studentWords: "Seven and nine. Five seven, five seven.",
+      lastDuckLine: "Test me: 1, 3, 5, 7, 9, looking for 6. Which numbers do you check?",
+      fallbackLine: "What's the next piece of it?",
+    },
+    mustNotMatch: /oh right|seven and nine/i,
+  },
 ];
 
 describe.skipIf(!live)("clarification and explain requests (live Grok)", () => {
