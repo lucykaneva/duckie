@@ -121,3 +121,36 @@ export const VOICE = {
   /** This many failed turns in a row and the duck stops the session instead of asking again. */
   maxFailedTurnsInARow: 3,
 };
+
+// summarizeProfile (A11): how a turn log becomes a learner profile. Tune here, never in logic.
+export const PROFILE = {
+  model: "grok-4.20-non-reasoning",
+  /** Runs after a session ends, not during a conversation, so it can take longer than a live call. */
+  timeoutMs: 15_000,
+  maxTokens: 900,
+  temperature: 0.3,
+  /** Most student turns sent to Grok, newest kept. */
+  maxTurns: 40,
+  /** Each turn is cut to this many characters before it reaches the prompt. */
+  turnChars: 400,
+  /** Longest sentence stored for calibration, pace, nagginess and tone. */
+  fieldChars: 120,
+  maxHabits: 4,
+  maxDuckLearned: 5,
+  /** A quote shown to the student is cut to its first words, so the panel stays readable. */
+  quoteWordsMax: 12,
+
+  /** Per-user config overrides never move a number further than this fraction from its default. */
+  maxOverridePct: 0.25,
+  /** Words per minute while speaking. Slower than this, or faster than the next one, changes the timing. */
+  slowWpm: 95,
+  fastWpm: 155,
+  /** A turn with fillers or hedges counts as "pausing mid-thought" when this share of turns has them. */
+  hesitantShare: 0.4,
+  /** A quiet student: this many silence signals per student turn gives them longer before the duck speaks. */
+  quietShare: 0.2,
+  /** Accepted skips (in the log) before the duck follows up less. */
+  skipsForLessNagging: 2,
+  /** Calibration gap in points (confidence x 20 minus understanding) that counts as over- or under-confident. */
+  calibrationGap: 15,
+};
