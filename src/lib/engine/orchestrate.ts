@@ -1,6 +1,6 @@
 import { DUCK, ENGINE } from "../duck/config";
 import type { DuckConfig } from "../duck/config";
-import type { ConceptForJudge, DuckMove, JudgeResult } from "../duck/types";
+import type { ConceptForJudge, DuckMove, JudgeResult, Profile, TurnLogRow } from "../duck/types";
 import type { JudgeInput } from "../prompts/judgeTurn";
 import { isWorded } from "../prompts/wordMove";
 import type { WordMoveInput, WordMoveResult } from "../prompts/wordMove";
@@ -38,6 +38,13 @@ export interface OrchestrateDeps {
   judge: (input: JudgeInput) => Promise<JudgeResult>;
   /** Dev A's wordMoveDetailed. Always resolves to a speakable line. */
   word: (input: WordMoveInput) => Promise<WordMoveResult>;
+  /** Dev A's summarizeProfile (A11). Always returns a usable profile. */
+  summarize?: (input: {
+    turns: TurnLogRow[];
+    previous?: Profile;
+    sessions?: { confidence: number; understanding: number }[];
+    userId?: string;
+  }) => Promise<Profile>;
   /** For tests: a clock that can be moved. */
   now?: () => number;
 }

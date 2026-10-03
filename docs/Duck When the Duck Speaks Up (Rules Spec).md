@@ -235,6 +235,14 @@ Each successful recall doubles the interval, up to 30 days, following Burrow's r
 - **Recall dates** start at 1 day (misconception, explained-to, skipped, not-yet), 2 days (assisted) or 4 days (owned). A later successful recall (owned or assisted again) doubles the interval up to 30 days; a miss resets to 1 day.
 - **`GET /results`** returns the contract shape from live concept state and the student's own quotes. **`GET /review/due`** lists concepts whose due date is today or earlier.
 
+**How the duck adapts** (added by Dev B in B13). Covered by `tests/profile.test.ts`.
+
+- **Code owns the numbers.** After `/end`, skips, mid-thought pauses and the Illusion Score become a small set of config overrides. Each number stays within 25% of the default (`PROFILE.maxOverridePct`). Grok never sets a threshold.
+- **Pace** waits longer after mid-thought pauses (`endOfTurnSilenceMs`, `unfinishedThoughtWaitMs`). **Nagginess** raises L1 and drops the per-concept move cap when they skip often. **Calibration** lowers the ladder when they felt sure and owned little, so the next session probes sooner.
+- **Those knobs freeze at session start** on the session row, so a profile rewrite mid-demo does not change the live run. The profile's tone line is wording only.
+- **Every "Your duck has learned" line needs a student quote.** A line without a verbatim quote is dropped, same rule as the judge. `GET /api/profile` and `GET /results.duckLearned` return the stored lines.
+- **`summarizeProfile` (A11) may rewrite the prose.** If it is missing, slow or throws, the code-only profile is stored.
+
 ## Config and AI rules
 
 All thresholds live in one config object so the team can tune them after testing without touching logic.

@@ -20,9 +20,9 @@ Talk against the real engine at `/dev/voice` (Real server, not Mock) or start fr
 3. When you teach, Grok judges structure (quotes have to appear in your words). Code updates scores and the help ladder.
 4. The next line is worded from your last turn. Fallback questions are the *intent* (probe the gap), not a script to recite. Planted claims and traces (`lo = mid`, `1, 3, 5, 7, 9`) stay exact so the answer cannot leak.
 5. "Hmm, let me think" only plays if `/turn` is still going after **8 seconds**. A normal Grok round trip is 2–4 s.
-6. `/end` computes understanding, the Illusion Score, the strongest moment, the one concept to revisit, and recall dates. The spoken wrap-up is one sentence about *this* session.
+6. `/end` computes understanding, the Illusion Score, the strongest moment, the one concept to revisit, recall dates, and the learner profile. The spoken wrap-up is one sentence about *this* session.
 
-Code still owns scores, levels, leak check, skip/wrap brakes, and which concept is the hole. Grok owns whether you started teaching and the words you hear.
+Code still owns scores, levels, leak check, skip/wrap brakes, and which concept is the hole. Grok owns whether you started teaching and the words you hear. Per-user config overrides stay within 25% of the default.
 
 ## Illusion Score and recall
 
@@ -30,7 +30,7 @@ Code still owns scores, levels, leak check, skip/wrap brakes, and which concept 
 - **Illusion Score** = stated confidence (1–5 × 20) minus understanding.
 - **Recall:** 1 day (misconception, explained-to, skipped, not-yet), 2 days (assisted), 4 days (owned). A later success doubles the interval up to 30 days; a miss resets to 1.
 
-`GET /api/sessions/:id/results` and `GET /api/review/due` return that from the database, not stubs.
+`GET /api/sessions/:id/results`, `GET /api/review/due` and `GET /api/profile` return that from the database, not stubs.
 
 ## Stack
 
@@ -40,5 +40,5 @@ Keys go in `.env.local` or `.env`, never in git.
 
 ## Docs
 
-- [Master build plan](docs/The%20Study%20Duck%20Master%20Build%20Plan.md) — API contract, who owns what, B12 done-when
-- [Rules spec](docs/Duck%20When%20the%20Duck%20Speaks%20Up%20(Rules%20Spec).md) — signals, ladder, conversation orchestration, end-of-session
+- [Master build plan](docs/The%20Study%20Duck%20Master%20Build%20Plan.md) — API contract, who owns what, B13 done-when
+- [Rules spec](docs/Duck%20When%20the%20Duck%20Speaks%20Up%20(Rules%20Spec).md) — signals, ladder, conversation, end-of-session, profile

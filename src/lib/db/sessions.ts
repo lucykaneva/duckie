@@ -1,21 +1,29 @@
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
-import type { DuckMove, DueRecall, Level, MoveKind, SessionResults } from "../duck/types";
+import type { DuckMove, DueRecall, Level, MoveKind, Profile, SessionResults, TurnLogRow } from "../duck/types";
 import { DEMO_USER_ID } from "../duck/types";
-import { buildDebrief } from "../engine/debrief";
+import { buildDebrief, understandingPercent } from "../engine/debrief";
 import type { ExistingRecall } from "../engine/debrief";
 import type { StoredAnswer } from "../engine/guard";
 import { orchestrateSilence, orchestrateTurn } from "../engine/orchestrate";
 import type { OrchestrateDeps, TurnMeta } from "../engine/orchestrate";
+import {
+  finishProfile,
+  profileFacts,
+  sessionConfig,
+  toTurnLogRows,
+} from "../engine/profile";
 import { silenceStepFor } from "../engine/silence";
 import { freshSession, openingMove } from "../engine/turn";
 import type { ConceptDef, ConceptRun, SessionRun } from "../engine/turn";
 import { judgeTurn } from "../prompts/judgeTurn";
+import { summarizeProfile } from "../prompts/summarizeProfile";
 import { wordMoveDetailed } from "../prompts/wordMove";
 import { getPool } from "./client";
+import { getLearnerProfile, saveLearnerProfile } from "./profile";
 
 /** The real Grok calls. Tests pass fakes. */
-export const liveDeps: OrchestrateDeps = { judge: judgeTurn, word: wordMoveDetailed };
+export const liveDeps: OrchestrateDeps = { judge: judgeTurn, word: wordMoveDetailed, summarize: summarizeProfile };
 
 // Loads a session's state, runs the engine on one event (a finished student turn or a
 // silence timer), and saves the result. The session row is locked for the whole event
@@ -91,7 +99,17 @@ export async function createSession(input: {
     }
 
     const sessionId = `s_${randomUUID().slice(0, 8)}`;
-    const fresh = freshSession(defs);
+    const owner = await client.query<{ user_id: string }>(
+      `SELECT c.user_id FROM sections sec JOIN courses c ON c.id = sec.course_id WHERE sec.id = $1`,
+      [input.sectionId],
+    );
+    const userId = owner.rows[0]?.user_id ?? DEMO_USER_ID;
+    const profile = await getLearnerProfile(userId, client);
+    const fresh: SessionRun = {
+      ...freshSession(defs),
+      configOverrides: profile.configOverrides,
+      toneHint: profile.tone || undefined,
+    };
     await client.query(
       `INSERT INTO sessions (id, section_id, topic, confidence, engine) VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [sessionId, input.sectionId, input.topic, input.confidence, JSON.stringify(toStored(fresh))],
@@ -338,9 +356,18 @@ export async function runTurn(
     const { defs, run, nextN } = locked.session;
 
     const answers = await loadAnswers(client, locked.session.sectionId);
+    const config = sessionConfig(run.configOverrides);
     const { outcome, meta } = await orchestrateTurn(
-      { defs, run, answers, text: turn.text, nowMs: (turn.endedAt ?? new Date()).getTime() },
+      {
+        defs,
+        run,
+        answers,
+        text: turn.text,
+        nowMs: (turn.endedAt ?? new Date()).getTime(),
+        toneHint: run.toneHint,
+      },
       deps,
+      config,
     );
     if (meta.leakBlocked.length > 0) console.warn(`leak check blocked a line about ${meta.leakBlocked.join(", ")}`);
     await saveRun(client, sessionId, outcome.session);
@@ -397,7 +424,12 @@ export async function runSilence(
     const { defs, run, nextN } = locked.session;
 
     const answers = await loadAnswers(client, locked.session.sectionId);
-    const outcome = await orchestrateSilence({ defs, run, answers, step, nowMs: Date.now() }, deps);
+    const config = sessionConfig(run.configOverrides);
+    const outcome = await orchestrateSilence(
+      { defs, run, answers, step, nowMs: Date.now(), toneHint: run.toneHint },
+      deps,
+      config,
+    );
     if (!outcome) {
       await client.query("ROLLBACK");
       return { status: "stale" };
@@ -478,6 +510,72 @@ async function debriefBits(
   };
 }
 
+async function loadTurnLog(client: PoolClient, sessionId: string): Promise<TurnLogRow[]> {
+  const { rows } = await client.query<{
+    id: string;
+    session_id: string;
+    n: number;
+    text: string;
+    started_at: Date | null;
+    ended_at: Date | null;
+    signals: unknown;
+    score_after: number | null;
+    level: Level | null;
+    move_kind: MoveKind | null;
+    line: string;
+  }>(
+    `SELECT id, session_id, n, text, started_at, ended_at, signals, score_after, level, move_kind, line
+       FROM turns WHERE session_id = $1 AND source = 'student' AND text <> '' ORDER BY n`,
+    [sessionId],
+  );
+  return toTurnLogRows(
+    rows.map((r) => ({
+      id: r.id,
+      sessionId: r.session_id,
+      n: r.n,
+      text: r.text,
+      startedAt: r.started_at,
+      endedAt: r.ended_at,
+      signals: Array.isArray(r.signals) ? (r.signals as string[]) : [],
+      scoreAfter: r.score_after,
+      level: r.level,
+      moveKind: r.move_kind,
+      line: r.line,
+    })),
+  );
+}
+
+async function refreshLearnerProfile(
+  client: PoolClient,
+  sessionId: string,
+  userId: string,
+  concepts: ConceptRun[],
+  confidence: number,
+  deps: OrchestrateDeps,
+): Promise<Profile> {
+  const turns = await loadTurnLog(client, sessionId);
+  const previous = await getLearnerProfile(userId, client);
+  const sessions = [{ confidence, understanding: understandingPercent(concepts) }];
+  let profile: Profile | null = null;
+  if (deps.summarize) {
+    try {
+      profile = await deps.summarize({ turns, previous, sessions, userId });
+    } catch {
+      // Grok path already falls back inside A11; this is only if the function itself throws.
+    }
+  }
+  if (!profile) {
+    profile = finishProfile({
+      userId,
+      turns,
+      previous,
+      facts: profileFacts({ concepts, turns, confidence }),
+    });
+  }
+  await saveLearnerProfile(profile, client);
+  return profile;
+}
+
 export type EndResult = { status: "ok"; move: DuckMove } | { status: "not_found" };
 
 /** Close the session: scores, recall dates, and the spoken wrap-up. Safe to call twice. */
@@ -525,6 +623,7 @@ export async function endSession(
       studentWords: bits.quotes.map((q) => q.text).join(" "),
       fallbackLine: wrapLine,
       situation,
+      toneHint: run.toneHint,
     });
     const line = worded.line;
 
@@ -544,6 +643,7 @@ export async function endSession(
     const closed: SessionRun = { ...run, closing: true, closingLine: line };
     await saveRun(client, sessionId, closed);
     await client.query(`UPDATE sessions SET ended_at = now(), end_reason = $2 WHERE id = $1`, [sessionId, reason]);
+    await refreshLearnerProfile(client, sessionId, userId, run.concepts, confidence, deps);
     await client.query("COMMIT");
     return { status: "ok", move: wrapMove(closed, defs, line) };
   } catch (error) {
@@ -569,6 +669,7 @@ export async function getSessionResults(sessionId: string): Promise<SessionResul
       userId,
       run.concepts.map((c) => c.conceptId),
     );
+    const profile = await getLearnerProfile(userId, client);
     const { results } = buildDebrief({
       sessionId,
       topic,
@@ -579,6 +680,7 @@ export async function getSessionResults(sessionId: string): Promise<SessionResul
       celebrationLine: bits.celebrationLine,
       existingRecall: bits.existingRecall,
       freezeRecall: ended,
+      duckLearned: profile.duckLearned,
     });
     return results;
   } finally {

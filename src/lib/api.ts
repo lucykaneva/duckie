@@ -2,6 +2,7 @@ import type {
   Concept,
   Course,
   DuckMove,
+  Profile,
   Section,
   SectionType,
   SessionResults,
@@ -265,4 +266,8 @@ export async function getResults(sessionId: string): Promise<SessionResults> {
     `/api/sessions/${encodeURIComponent(sessionId)}/results`,
     "load the results",
   );
+}
+
+export async function getProfile(): Promise<Profile> {
+  return request<Profile>("/api/profile", "load the profile");
 }

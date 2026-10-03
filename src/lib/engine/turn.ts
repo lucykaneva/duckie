@@ -106,6 +106,10 @@ export interface SessionRun {
   committed: string[];
   /** Spoken /end summary, set once when the session ends. */
   closingLine?: string;
+  /** Clamped adaptability knobs from the learner profile, frozen at session start (B13). */
+  configOverrides?: Partial<DuckConfig>;
+  /** Wording only. From the profile's tone line. */
+  toneHint?: string;
 }
 
 export interface TurnInput {

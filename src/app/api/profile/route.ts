@@ -1,5 +1,11 @@
-import { STUB_PROFILE } from "@/app/api/stub-data";
+import { getLearnerProfile } from "@/lib/db/profile";
 
 export async function GET() {
-  return Response.json(STUB_PROFILE);
+  try {
+    const profile = await getLearnerProfile();
+    return Response.json(profile);
+  } catch (error) {
+    console.error("GET /api/profile failed", error);
+    return Response.json({ error: "Could not load the profile" }, { status: 500 });
+  }
 }
