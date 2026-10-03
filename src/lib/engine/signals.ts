@@ -1,4 +1,4 @@
-import { DUCK } from "../duck/config";
+import { DUCK, ENGINE } from "../duck/config";
 import type { DuckConfig } from "../duck/config";
 import {
   AFFIRMATIVE_PATTERN,
@@ -119,6 +119,21 @@ export function detectClarification(text: string): boolean {
 export function detectQuestion(text: string): boolean {
   const t = normalize(text);
   return t.includes("?") || QUESTION_START_PATTERN.test(t);
+}
+
+/**
+ * The student asked the duck a real question ("Is it log n?", "Why does that work?"), not an explanation that
+ * happens to end in "right?". Starts with a question word, one sentence, and short. A question means they
+ * need help, so the engine treats it like asking for a hint.
+ */
+export function detectAskingQuestion(text: string): boolean {
+  const t = normalize(text);
+  if (detectClarification(text) || !QUESTION_START_PATTERN.test(t)) return false;
+  const words = t.split(/\s+/).filter(Boolean).length;
+  const marks = (t.match(/\?/g) ?? []).length;
+  if (marks > 1 || words > ENGINE.questionMaxWords) return false;
+  if (marks === 1) return t.endsWith("?");
+  return words <= ENGINE.questionNoMarkMaxWords;
 }
 
 /** "Can you explain it?" A request for help, never a struggle signal. */

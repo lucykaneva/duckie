@@ -20,6 +20,7 @@ import {
   detectHelpRequest,
   detectKeepGoing,
   detectMoveOn,
+  detectAskingQuestion,
   detectQuestion,
   detectTextSignals,
   detectWrapUpRequest,
@@ -264,6 +265,16 @@ export function processTurn(
   const focusRun = concepts.find((c) => c.conceptId === session.focusConceptId);
   const focus = focusRun && isOpen(focusRun) ? focusRun : undefined;
 
+  // A question from the student means they need help, not that they failed. If there is an idea in focus the duck
+  // gives a hint on it (asking for help is never an attempt); nothing is scored. With nothing open to help with,
+  // the duck asks for their guess (2b).
+  const askedQuestion =
+    !detectKeepGoing(text) &&
+    !detectAffirmative(text) &&
+    !detectClarification(text) &&
+    (session.pending !== null ? detectQuestion(text) : detectAskingQuestion(text));
+  const questionHelp = askedQuestion && focus !== undefined;
+
   const defOf = (c: ConceptRun): ConceptDef | undefined => defById.get(c.conceptId);
   const fallbackConceptId = session.focusConceptId ?? concepts[0]?.conceptId ?? "";
   const finishedConcepts = (): number => concepts.filter((c) => !isOpen(c)).length;
@@ -333,13 +344,14 @@ export function processTurn(
   if (session.pending === "wrap_proposal" && detectAffirmative(text)) return closeOutcome();
 
   // 2b. The student answered a check-in or proposal with a question ("Is it log three?", "what do you mean?").
-  // A question is neither yes nor no, so the session must not close on it and nothing is scored. The duck
-  // cannot answer it ("I'm just a duck"), so it asks again; if they only did not understand, it repeats itself.
+  // A question is neither yes nor no, so the session must not close on it and nothing is scored. If they only
+  // did not understand, the duck repeats itself. A real question about an idea in focus gets a hint further
+  // down (questionHelp); with nothing open to help on, the duck asks for their guess and keeps waiting.
   if (
     session.pending !== null &&
     !detectKeepGoing(text) &&
     !detectAffirmative(text) &&
-    (detectClarification(text) || detectQuestion(text))
+    (detectClarification(text) || (detectQuestion(text) && !questionHelp))
   ) {
     const line = detectClarification(text)
       ? session.lastLine
@@ -397,6 +409,7 @@ export function processTurn(
     detectTextSignals(text, config).length === 0 &&
     !detectMoveOn(text) &&
     !detectHelpRequest(text) &&
+    !questionHelp &&
     !detectAffirmative(text)
   ) {
     const repeatKind: MoveKind =
@@ -424,6 +437,7 @@ export function processTurn(
   // that is not an answer about a concept, so nothing is scored and the duck carries on. A long reply is
   // the student explaining; it is scored as usual and counts as turning the proposal down.
   const repliedToAsk =
+    !questionHelp &&
     session.pending !== null &&
     (detectKeepGoing(text) ||
       detectAffirmative(text) ||
@@ -448,9 +462,10 @@ export function processTurn(
     skippedNow = true;
     ack = ACK_SKIP_LINE;
   } else if (!repliedToAsk) {
-    helpRequested = focus !== undefined && detectHelpRequest(text);
+    helpRequested = focus !== undefined && (detectHelpRequest(text) || questionHelp);
 
-    for (const c of concepts) {
+    // A question is scored as nothing: it is neither an answer nor a failed attempt.
+    for (const c of questionHelp ? [] : concepts) {
       if (!isOpen(c)) continue;
       const isFocus = c === focus;
       const answer = input.answer?.conceptId === c.conceptId ? input.answer : undefined;

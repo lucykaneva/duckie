@@ -53,6 +53,12 @@ export const ENGINE = {
    * or a reply like "keep going" to a check-in.
    */
   shortTurnMaxWords: 3,
+  /**
+   * A student question ("Is it log n?") means they need help. Only a short, single-sentence question counts, so a
+   * long explanation that ends in "right?" is still scored as teaching. Without a question mark the cap is lower.
+   */
+  questionMaxWords: 15,
+  questionNoMarkMaxWords: 8,
 
   // Running a concept's reference code (B10). The code is written by the AI, so it runs in a locked-down child process.
   /** The script is stopped after this long (an infinite loop). */
