@@ -3,6 +3,7 @@ import type { DuckConfig } from "../duck/config";
 import {
   AFFIRMATIVE_PATTERN,
   CLARIFY_PATTERNS,
+  EXPLAIN_REQUEST_PATTERNS,
   DONT_KNOW_PATTERNS,
   FILLER_WORD,
   HEDGE_PATTERNS,
@@ -134,6 +135,12 @@ export function detectAskingQuestion(text: string): boolean {
   if (marks > 1 || words > ENGINE.questionMaxWords) return false;
   if (marks === 1) return t.endsWith("?");
   return words <= ENGINE.questionNoMarkMaxWords;
+}
+
+/** "Can you explain it?" Asking to be explained to (not a hint request). */
+export function detectExplainRequest(text: string): boolean {
+  const t = normalize(text);
+  return EXPLAIN_REQUEST_PATTERNS.some((pattern) => pattern.test(t));
 }
 
 /** "Can you explain it?" A request for help, never a struggle signal. */

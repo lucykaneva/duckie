@@ -81,6 +81,18 @@ export const HELP_REQUEST_PATTERNS: RegExp[] = [
 ];
 
 /**
+ * Asking the duck to explain ("Can you explain it?", "I don't understand"). Narrower than a help request: a hint
+ * request ("give me a hint") stays a hint, but asking to be explained to gets the explanation once the student
+ * has already tried.
+ */
+export const EXPLAIN_REQUEST_PATTERNS: RegExp[] = [
+  /\b(?:can|could|would|will) you (?:please )?(?:just )?(?:explain|walk me through|tell me)\b/,
+  /\bplease explain\b/,
+  /\bexplain (?:it|that|this) to me\b/,
+  /\b(?:i )?(?:don'?t|do not) (?:understand|get) (?:it|this|that)\b/,
+];
+
+/**
  * "What do you mean by pebbles?", "say that again", "I don't get the question". The student is asking
  * about the duck's last line, not answering it. Never a struggle signal.
  */

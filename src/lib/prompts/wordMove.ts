@@ -31,6 +31,12 @@ export interface WordMoveInput {
    * that and adds a small hint (L1 to L3). Code decides this; Grok never judges right or wrong.
    */
   studentWas?: "wrong";
+  /**
+   * What the student just did, found by code. "clarify": they asked what the duck meant ("what do you mean by
+   * pebbles?"), so the duck explains its own words. "help": they asked for an explanation or asked a question,
+   * so the duck must not hand their question back to them.
+   */
+  studentAsked?: "clarify" | "help";
 }
 
 export interface WordMoveOptions {
@@ -53,6 +59,7 @@ export interface WordMoveResult {
 type Worded = {
   kind: MoveKind;
   level: Level;
+  studentAsked?: "clarify" | "help";
 };
 
 /**
@@ -60,8 +67,10 @@ type Worded = {
  * exact. L0 check questions stay exact too: they carry a planted claim or the trace values.
  * `open` is worded after the student has spoken, so a hello gets a hello back, not a quiz.
  */
-export function isWorded({ kind, level }: Worded): boolean {
+export function isWorded({ kind, level, studentAsked }: Worded): boolean {
   if (kind === "celebrate" || kind === "open" || kind === "reinforce") return true;
+  // "What do you mean by pebbles?" at any level, even the opening question: say what the duck meant.
+  if (kind === "rephrase" && studentAsked === "clarify") return true;
   return (kind === "question" || kind === "rephrase") && level !== "L0";
 }
 
@@ -89,7 +98,7 @@ export function slidesUnavailable(studentWords: string): boolean {
 /** Returns a plain-English reason the line is not allowed, or null if it is fine. */
 export function lineProblem(
   line: string,
-  input: Pick<WordMoveInput, "kind" | "level" | "slide" | "studentWas"> & { noSlides?: boolean },
+  input: Pick<WordMoveInput, "kind" | "level" | "slide" | "studentWas" | "studentAsked"> & { noSlides?: boolean },
 ): string | null {
   const text = line.trim();
   if (!text) return "the line was empty";
@@ -104,10 +113,14 @@ export function lineProblem(
   if ((input.kind === "celebrate" || input.kind === "wrap_up") && questions > 0) {
     return input.kind === "wrap_up" ? "a wrap-up must not ask a question" : "a celebration must not ask a question";
   }
-  if (input.kind === "reinforce" && questions !== 1) {
+  if (input.kind === "reinforce" && input.studentAsked !== "clarify" && questions !== 1) {
     return "it must end by asking the student to say it back, as one question";
   }
-  if (input.kind !== "celebrate" && input.kind !== "reinforce" && input.level === "L4" && questions !== 1) {
+  const explainingWords = input.studentAsked === "clarify";
+  if (explainingWords && /\b(?:what|which) (?:do|did|does) (?:you|that|it|this) mean\b|\bwhat(?:'s| is| are) (?:a|an|the|your) \w+\?/i.test(text)) {
+    return "it hands the student's own question back; it must explain what the duck meant";
+  } // an explanation of the duck's own words, not a hint
+  if (input.kind !== "celebrate" && input.kind !== "reinforce" && !explainingWords && input.level === "L4" && questions !== 1) {
     return "an explanation must end by asking the student to say it back, as one question";
   }
   if (input.noSlides && /\bslides?\b/i.test(text)) {
@@ -116,6 +129,7 @@ export function lineProblem(
   if (
     input.kind !== "celebrate" &&
     input.kind !== "reinforce" &&
+    !explainingWords &&
     input.level === "L2" &&
     input.slide !== undefined &&
     !input.noSlides
@@ -123,7 +137,11 @@ export function lineProblem(
     if (!new RegExp(`\\bslide\\s*${input.slide}\\b`, "i").test(text)) return `it must name slide ${input.slide}`;
   }
   // Spoken questions need the question mark so the voice rises at the end.
-  if ((input.kind === "question" || input.kind === "rephrase") && (input.level === "L1" || input.level === "L2")) {
+  if (
+    (input.kind === "question" || input.kind === "rephrase") &&
+    (input.level === "L1" || input.level === "L2") &&
+    !explainingWords
+  ) {
     if (questions !== 1) return "it must be a question and end with a question mark";
   }
   if (
@@ -206,9 +224,16 @@ function taskFor(input: WordMoveInput): string {
   if (input.kind === "celebrate") {
     return "Praise the student once, and name specifically what they just did. Keep it short and do not ask a question.";
   }
+  if ((input.kind === "rephrase" || input.kind === "reinforce") && input.studentAsked === "clarify") {
+    return "The student asked what you meant. Explain what you meant in one or two short, plain, everyday sentences: if they asked about a word or idea from your last line (like a pebble standing for an item in a list), say what it stands for. Do not just repeat your last line, and do not give the answer to your own question. You are the one being asked, so NEVER ask them what they mean and never repeat their question back. You may finish by asking your own earlier question again in simpler words (at most one question mark).";
+  }
   if (input.kind === "reinforce") {
     return "The student just got this right. Say so in a few words using their own words, add one small hint that points at the key part of what THEY said or at the concept name (a nudge about what to hold on to, never a new fact or a full explanation), then ask them to say it back in their own words. End with that one question. Keep it under 18 words: do not repeat their whole sentence back, use at most four of their words. Match the tone note if there is one.";
   }
+  const dontEcho =
+    input.studentAsked === "help"
+      ? " The student asked you for help or asked you a question: never hand their question back to them, never start with their words (like \"No, can you\"), and do not say \"can you explain\" yourself."
+      : "";
   if (input.studentWas === "wrong" && input.level !== "L4" && input.level !== "L0") {
     const hint =
       input.level === "L2" && !noSlides
@@ -235,11 +260,11 @@ function taskFor(input: WordMoveInput): string {
       if (noSlides) {
         return (
           "The student said they cannot see the slides, so do not mention slides. Instead ask one tiny, concrete question about this idea in everyday words, without giving the answer." +
-          again
+          again + dontEcho
         );
       }
       return (
-        `Point to the source: name slide ${input.slide ?? "the slide"} and ask what it says about this. Do not give the answer.` + again
+        `Point to the source: name slide ${input.slide ?? "the slide"} and ask what it says about this. Do not give the answer.` + again + dontEcho
       );
     case "L3":
       return (
