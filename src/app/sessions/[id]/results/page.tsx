@@ -23,6 +23,7 @@ export default function SessionResultsPage() {
 
   const [results, setResults] = useState<SessionResults | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
@@ -37,14 +38,17 @@ export default function SessionResultsPage() {
     }
 
     setStatus("loading");
+    setError("");
     getResults(sessionId)
       .then((data) => {
         if (cancelled) return;
         setResults(data);
         setStatus("ready");
       })
-      .catch(() => {
-        if (!cancelled) setStatus("error");
+      .catch((caught: unknown) => {
+        if (cancelled) return;
+        setError(caught instanceof Error ? caught.message : "Couldn't load the results.");
+        setStatus("error");
       });
 
     return () => {
@@ -95,7 +99,7 @@ export default function SessionResultsPage() {
           </header>
           <div className="mt-8">
             <ErrorState
-              message="Couldn't load the results."
+              message={error || "Couldn't load the results."}
               action={<Button onClick={() => setReload((value) => value + 1)}>Try again</Button>}
             />
           </div>

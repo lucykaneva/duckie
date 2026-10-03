@@ -60,6 +60,12 @@ export function isWorded({ kind, level }: Worded): boolean {
   return (kind === "question" || kind === "rephrase") && level !== "L0";
 }
 
+/** /end wrap-up is worded from the session. /turn's "Okay, let's wrap up" stays exact. */
+function shouldWord(input: WordMoveInput): boolean {
+  if (input.kind === "wrap_up") return Boolean(input.situation?.trim());
+  return isWorded(input);
+}
+
 // ---- the rules a line must obey ----------------------------------------------------------------
 
 const MARKDOWN_OR_SYMBOLS = /[*_`#<>[\]{}|\\~^]/;
@@ -82,7 +88,9 @@ export function lineProblem(line: string, input: Pick<WordMoveInput, "kind" | "l
   if (MARKDOWN_OR_SYMBOLS.test(text) || EMOJI.test(text)) return "it has symbols or emoji that cannot be spoken";
   if (/^["'\u201c].*["'\u201d]$/.test(text)) return "it is wrapped in quotation marks";
 
-  if (input.kind === "celebrate" && questions > 0) return "a celebration must not ask a question";
+  if ((input.kind === "celebrate" || input.kind === "wrap_up") && questions > 0) {
+    return input.kind === "wrap_up" ? "a wrap-up must not ask a question" : "a celebration must not ask a question";
+  }
   if (input.kind !== "celebrate" && input.level === "L4" && questions !== 1) {
     return "an explanation must end by asking the student to say it back, as one question";
   }
@@ -126,6 +134,9 @@ function taskFor(input: WordMoveInput): string {
   }
   if (input.kind === "celebrate") {
     return "Praise the student once, and name specifically what they just did. Keep it short and do not ask a question.";
+  }
+  if (input.kind === "wrap_up") {
+    return "One spoken sentence. If they taught something, name that and the one idea to revisit. If they did not teach, do not pretend they found a concept. Do not say I found. Do not quiz or ask a question.";
   }
   const again =
     input.kind === "rephrase"
@@ -182,7 +193,7 @@ function userMessage(input: WordMoveInput): string {
 // ---- the loop: try, retry once, fall back --------------------------------------------------------
 
 export async function wordMoveDetailed(input: WordMoveInput, options: WordMoveOptions = {}): Promise<WordMoveResult> {
-  if (!isWorded(input)) return { line: input.fallbackLine, source: "fixed", attempts: 0 };
+  if (!shouldWord(input)) return { line: input.fallbackLine, source: "fixed", attempts: 0 };
 
   const now = options.now ?? Date.now;
   const started = now();

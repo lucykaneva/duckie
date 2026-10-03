@@ -153,12 +153,34 @@ describe("wordMoveDetailed", () => {
     expect(grok.calls()).toBe(1);
   });
 
+  it("words the /end wrap-up from the session situation, not a stub", async () => {
+    const grok = fakeGrok(["You caught the update bug. Come back to log n."]);
+    const result = await wordMoveDetailed(
+      {
+        kind: "wrap_up",
+        level: "L0",
+        conceptName: "O(log n)",
+        topic: "Binary search",
+        studentWords: "it halves each time",
+        fallbackLine: "You found the update step. Revisit O(log n).",
+        situation: "They owned the update step. Still shaky: O(log n).",
+      },
+      { fetchImpl: grok.fetchImpl },
+    );
+    expect(result).toMatchObject({
+      line: "You caught the update bug. Come back to log n.",
+      source: "ai",
+    });
+    expect(grok.bodies[0].messages[1].content).toMatch(/If they taught something/);
+  });
+
   it("does not call Grok at all for lines the engine owns", async () => {
     const grok = fakeGrok(["should never be used"]);
     for (const input of [
       { ...BASE, kind: "question" as const, level: "L0" as const },
       { ...BASE, kind: "ack" as const },
       { ...BASE, kind: "pause" as const },
+      { ...BASE, kind: "wrap_up" as const, level: "L0" as const },
     ]) {
       const result = await wordMoveDetailed(input, { fetchImpl: grok.fetchImpl });
       expect(result).toMatchObject({ line: FALLBACK, source: "fixed", attempts: 0 });

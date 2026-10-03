@@ -1,9 +1,11 @@
 "use client";
 
 // Dev A's throwaway test page for the duck loop. Not part of the product UI.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DuckSession, type DuckSessionEvent, type DuckState } from "@/lib/voice/duckSession";
 import { httpTransport, mockTransport } from "@/lib/voice/transport";
+
+const LAST_SESSION_KEY = "duckie.lastSessionId";
 
 interface Row {
   id: number;
@@ -39,6 +41,20 @@ export default function VoiceSpikePage() {
   const [confidence, setConfidence] = useState(4);
   const [partial, setPartial] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
+  const [liveSessionId, setLiveSessionId] = useState<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(LAST_SESSION_KEY);
+      if (saved) {
+        sessionIdRef.current = saved;
+        setLiveSessionId(saved);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   function addRow(kind: Row["kind"], text: string, at = new Date().toISOString()) {
     const id = nextId.current++;
@@ -57,8 +73,21 @@ export default function VoiceSpikePage() {
       case "state":
         setState(event.state);
         addRow("system", `state: ${event.state}`);
+        if (event.state === "ended") {
+          const id = sessionIdRef.current;
+          if (id && id !== "mock") {
+            window.location.assign(`/sessions/${id}/results`);
+          }
+        }
         break;
       case "started":
+        sessionIdRef.current = event.start.sessionId;
+        setLiveSessionId(event.start.sessionId);
+        try {
+          localStorage.setItem(LAST_SESSION_KEY, event.start.sessionId);
+        } catch {
+          // ignore
+        }
         addRow("system", `session ${event.start.sessionId} started`);
         break;
       case "move":
@@ -185,6 +214,16 @@ export default function VoiceSpikePage() {
         ))}
         {partial && <p className="text-zinc-400 italic">… {partial}</p>}
       </section>
+
+      {liveSessionId && liveSessionId !== "mock" ? (
+        <p className="text-sm">
+          Session <code>{liveSessionId}</code>
+          {" · "}
+          <a className="underline" href={`/sessions/${liveSessionId}/results`}>
+            Open results
+          </a>
+        </p>
+      ) : null}
     </main>
   );
 }

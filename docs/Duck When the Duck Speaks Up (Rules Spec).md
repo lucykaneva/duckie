@@ -31,7 +31,7 @@ The duck waits for a real end of turn, evaluates the rules once, then makes exac
 | Barge-in | Student starts talking while the duck talks: duck stops within 300 ms and listens |
 | One move per turn | At most one question; spoken line of 20 words or fewer |
 | Long student turn | No interruption, however long; evaluate only when it ends |
-| Filler while thinking | If evaluation takes over 1.5 s, the duck says a short filler ("Hmm, let me think") once |
+| Filler while thinking | If `/turn` is still going after 8 s, the duck says a short filler ("Hmm, let me think") once. A normal Grok judge+wording call is 2–4 s, so the filler is for a stuck call, not every turn |
 
 Signals are scored only on finished turns. A concept the student has not mentioned yet is "not yet", never "missed", until their explanation turn ends.
 
@@ -218,12 +218,22 @@ Each successful recall doubles the interval, up to 30 days, following Burrow's r
 
 **How one finished turn is orchestrated** (added by Dev B in B11). Covered by `tests/orchestrate.test.ts`.
 
-- **The order is fixed.** Code-readable signals and the committed-answer check first; then `judgeTurn`; then the engine; then `wordMove`; then the leak check. Code decides the move. Grok only reads structure and writes words.
-- **Each Grok call has a time limit.** If the judge is slow, down or unusable, the turn is scored with code-only signals and an empty judge. If wording is slow or rejected, the precomputed line is spoken. The duck never waits for a second chance beyond what `wordMove` already retries.
-- **The judge is skipped** when the engine will not score the turn: the session is closing, the student asked to wrap up or skip, a short reply to a check-in or skip offer, or "I'm back" after a pause.
-- **"Missed" only applies to explainable concepts.** A trace or prediction is something the duck tests later, a planted claim is a probe the duck brings up itself, and a check question that asks how many or already contains a number is a later quiz. Leaving those out of the explanation turn is not a miss.
-- **`wordMove` only rewords help questions, rephrases and celebrations.** Opening lines, L0 check questions, acknowledgements, brakes, proposals, pause and wrap-up stay as the engine wrote them.
+- **The order is fixed.** Code-readable signals and the committed-answer check first; then `judgeTurn`; then the engine; then `wordMove`; then the leak check. Code decides the *kind* of move (invite, probe, celebrate, wrap). Grok reads whether they taught anything and writes the line.
+- **This is a conversation, not a quiz script.** Grok gets a situation brief: the topic, what the student just said, what the duck last said, what they already made sense of, and what is still open. The fallback question is the *intent* of the move, not words to recite. A greeting is not the end of an explanation; the duck replies to it and waits.
+- **"Missed" only after Grok sees they taught something** (a covered, vague, misconception or contradiction quote, or a committed trace). A hello that names no concept does not climb the ladder.
+- **Each Grok call has a time limit.** If the judge is slow, down or unusable, the turn is scored with code-only signals and an empty judge. If wording is slow or rejected, the precomputed line is spoken.
+- **The judge is skipped** when the engine will not score the turn: the session is closing, the student asked to wrap up or skip, a short reply to a check-in or skip offer, or "I'm back" after a pause. A first-turn hello *is* judged, so Grok can tell it from a real explanation.
+- **"Missed" only applies to explainable concepts.** A trace or prediction is something the duck tests later, a planted claim is a probe the duck brings up itself, and a check question that asks how many or already contains a number is a later quiz.
+- **`wordMove` rewords help questions, rephrases, celebrations, replies to an `open` after the student has spoken, and the `/end` wrap-up.** L0 check questions (planted claims and traces), acknowledgements, brakes, proposals and "Okay, let's wrap up" stay as the engine wrote them.
 - **The leak check runs on whatever `wordMove` returned.** A leaking line is replaced; the student never hears it. The prompt is never given a stored answer.
+
+**How a session ends** (added by Dev B in B12). Covered by `tests/debrief.test.ts`.
+
+- **`POST /end` computes the debrief from the real session.** Understanding is the share of concepts Owned, with Assisted counting half (0–100). Illusion Score is confidence × 20 minus understanding.
+- **The strongest moment** is a celebration if one happened, otherwise the best-ended concept. **The one concept to revisit** is the worst remaining hole (misconception, then explained-to, skipped, not-yet, assisted). All-owned sessions have nothing to revisit.
+- **The spoken wrap-up is one sentence** naming that high point and that hole. Grok words it from the session situation; if Grok is down, a 20-word fallback is spoken. It is never the old stub "You found where it stops. Revisit the update step."
+- **Recall dates** start at 1 day (misconception, explained-to, skipped, not-yet), 2 days (assisted) or 4 days (owned). A later successful recall (owned or assisted again) doubles the interval up to 30 days; a miss resets to 1 day.
+- **`GET /results`** returns the contract shape from live concept state and the student's own quotes. **`GET /review/due`** lists concepts whose due date is today or earlier.
 
 ## Config and AI rules
 
@@ -235,7 +245,7 @@ export const DUCK = {
   endOfTurnSilenceMs: 1_200,
   unfinishedThoughtWaitMs: 3_000,
   bargeInStopMs: 300,
-  fillerAfterMs: 1_500,
+  fillerAfterMs: 8_000,
   maxDuckWords: 20,
 
   // signal weights (section 3)

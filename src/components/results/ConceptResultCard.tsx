@@ -55,7 +55,7 @@ const HELP_LEVEL: Record<Level, string> = {
 };
 
 export function ConceptResultCard({ concept }: { concept: ResultsConcept }) {
-  const quote = concept.quotes[0];
+  const quote = concept.quotes?.[0];
 
   return (
     <article className="overflow-hidden rounded-card border border-border bg-surface">

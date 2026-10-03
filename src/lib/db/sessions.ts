@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
-import type { DuckMove, Level, MoveKind } from "../duck/types";
+import type { DuckMove, DueRecall, Level, MoveKind, SessionResults } from "../duck/types";
+import { DEMO_USER_ID } from "../duck/types";
+import { buildDebrief } from "../engine/debrief";
+import type { ExistingRecall } from "../engine/debrief";
 import type { StoredAnswer } from "../engine/guard";
 import { orchestrateSilence, orchestrateTurn } from "../engine/orchestrate";
 import type { OrchestrateDeps, TurnMeta } from "../engine/orchestrate";
@@ -141,6 +144,10 @@ interface LoadedSession {
   run: SessionRun;
   /** Next number for the `turns` log. */
   nextN: number;
+  topic: string;
+  confidence: number;
+  userId: string;
+  ended: boolean;
 }
 
 type Locked =
@@ -149,17 +156,29 @@ type Locked =
   | { status: "ended" };
 
 /** Lock the session row and load everything the engine needs. The caller owns the transaction. */
-async function lockAndLoad(client: PoolClient, sessionId: string): Promise<Locked> {
+async function lockAndLoad(
+  client: PoolClient,
+  sessionId: string,
+  opts: { allowEnded?: boolean; forUpdate?: boolean } = {},
+): Promise<Locked> {
+  const lock = opts.forUpdate === false ? "" : " FOR UPDATE";
   const row = await client.query<{
     section_id: string;
+    topic: string;
+    confidence: number | null;
     started_at: Date;
     ended_at: Date | null;
     engine: StoredEngine | null;
-  }>(`SELECT section_id, started_at, ended_at, engine FROM sessions WHERE id = $1 FOR UPDATE`, [
+  }>(`SELECT section_id, topic, confidence, started_at, ended_at, engine FROM sessions WHERE id = $1${lock}`, [
     sessionId,
   ]);
   if (row.rowCount === 0) return { status: "not_found" };
-  if (row.rows[0].ended_at) return { status: "ended" };
+  if (row.rows[0].ended_at && !opts.allowEnded) return { status: "ended" };
+
+  const owner = await client.query<{ user_id: string }>(
+    `SELECT c.user_id FROM sections sec JOIN courses c ON c.id = sec.course_id WHERE sec.id = $1`,
+    [row.rows[0].section_id],
+  );
 
   const sectionId = row.rows[0].section_id;
   const defs = await loadDefs(client, sectionId);
@@ -200,7 +219,19 @@ async function lockAndLoad(client: PoolClient, sessionId: string): Promise<Locke
     }),
   };
 
-  return { status: "ok", session: { sectionId, defs, run, nextN: (last.rows[0]?.n ?? 0) + 1 } };
+  return {
+    status: "ok",
+    session: {
+      sectionId,
+      defs,
+      run,
+      nextN: (last.rows[0]?.n ?? 0) + 1,
+      topic: row.rows[0].topic,
+      confidence: row.rows[0].confidence ?? 3,
+      userId: owner.rows[0]?.user_id ?? DEMO_USER_ID,
+      ended: row.rows[0].ended_at !== null,
+    },
+  };
 }
 
 /**
@@ -390,4 +421,192 @@ export async function runSilence(
   } finally {
     client.release();
   }
+}
+
+function wrapMove(run: SessionRun, defs: ConceptDef[], line: string): DuckMove {
+  return {
+    kind: "wrap_up",
+    level: "L0",
+    conceptId: run.focusConceptId ?? defs[0]?.id ?? "",
+    line,
+    sessionState: "wrapping_up",
+    concepts: run.concepts.map((c) => ({ id: c.conceptId, state: c.state, score: c.score })),
+  };
+}
+
+async function debriefBits(
+  client: PoolClient,
+  sessionId: string,
+  userId: string,
+  conceptIds: string[],
+): Promise<{
+  quotes: { conceptId: string; text: string }[];
+  celebrationLine: string | null;
+  existingRecall: ExistingRecall[];
+}> {
+  const quotes = await client.query<{ concept_id: string; text: string }>(
+    `SELECT concept_id, text FROM turns
+      WHERE session_id = $1 AND source = 'student' AND text <> '' AND concept_id IS NOT NULL
+      ORDER BY n`,
+    [sessionId],
+  );
+  const cele = await client.query<{ line: string }>(
+    `SELECT line FROM turns WHERE session_id = $1 AND move_kind = 'celebrate' AND line <> '' ORDER BY n LIMIT 1`,
+    [sessionId],
+  );
+  const recall = await client.query<{
+    concept_id: string;
+    state_after: ExistingRecall["stateAfter"];
+    interval_days: number;
+    successes: number;
+    due: string;
+  }>(
+    `SELECT concept_id, state_after, interval_days, successes, due_date::text AS due
+       FROM recall WHERE user_id = $1 AND concept_id = ANY($2::text[])`,
+    [userId, conceptIds],
+  );
+  return {
+    quotes: quotes.rows.map((r) => ({ conceptId: r.concept_id, text: r.text })),
+    celebrationLine: cele.rows[0]?.line ?? null,
+    existingRecall: recall.rows.map((r) => ({
+      conceptId: r.concept_id,
+      stateAfter: r.state_after,
+      intervalDays: r.interval_days,
+      successes: r.successes,
+      due: r.due,
+    })),
+  };
+}
+
+export type EndResult = { status: "ok"; move: DuckMove } | { status: "not_found" };
+
+/** Close the session: scores, recall dates, and the spoken wrap-up. Safe to call twice. */
+export async function endSession(
+  sessionId: string,
+  reason: string,
+  deps: OrchestrateDeps = liveDeps,
+): Promise<EndResult> {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const locked = await lockAndLoad(client, sessionId, { allowEnded: true });
+    if (locked.status !== "ok") {
+      await client.query("ROLLBACK");
+      return { status: "not_found" };
+    }
+    const { defs, run, topic, confidence, userId, ended } = locked.session;
+    if (ended && run.closingLine) {
+      await client.query("COMMIT");
+      return { status: "ok", move: wrapMove(run, defs, run.closingLine) };
+    }
+
+    const bits = await debriefBits(
+      client,
+      sessionId,
+      userId,
+      run.concepts.map((c) => c.conceptId),
+    );
+    const { results, recall, wrapLine, situation } = buildDebrief({
+      sessionId,
+      topic,
+      confidence,
+      defs,
+      concepts: run.concepts,
+      quotes: bits.quotes,
+      celebrationLine: bits.celebrationLine,
+      existingRecall: bits.existingRecall,
+    });
+
+    const worded = await deps.word({
+      kind: "wrap_up",
+      level: "L0",
+      conceptName: results.reviseNext,
+      topic,
+      studentWords: bits.quotes.map((q) => q.text).join(" "),
+      fallbackLine: wrapLine,
+      situation,
+    });
+    const line = worded.line;
+
+    for (const row of recall) {
+      await client.query(
+        `INSERT INTO recall (user_id, concept_id, state_after, interval_days, due_date, successes)
+         VALUES ($1, $2, $3, $4, $5::date, $6)
+         ON CONFLICT (user_id, concept_id) DO UPDATE SET
+           state_after = EXCLUDED.state_after,
+           interval_days = EXCLUDED.interval_days,
+           due_date = EXCLUDED.due_date,
+           successes = EXCLUDED.successes`,
+        [userId, row.conceptId, row.stateAfter, row.intervalDays, row.due, row.successes],
+      );
+    }
+
+    const closed: SessionRun = { ...run, closing: true, closingLine: line };
+    await saveRun(client, sessionId, closed);
+    await client.query(`UPDATE sessions SET ended_at = now(), end_reason = $2 WHERE id = $1`, [sessionId, reason]);
+    await client.query("COMMIT");
+    return { status: "ok", move: wrapMove(closed, defs, line) };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** Debrief for the results page. Works before or after /end. */
+export async function getSessionResults(sessionId: string): Promise<SessionResults | null> {
+  const client = await getPool().connect();
+  try {
+    const locked = await lockAndLoad(client, sessionId, { allowEnded: true, forUpdate: false });
+    if (locked.status !== "ok") {
+      return null;
+    }
+    const { defs, run, topic, confidence, userId, ended } = locked.session;
+    const bits = await debriefBits(
+      client,
+      sessionId,
+      userId,
+      run.concepts.map((c) => c.conceptId),
+    );
+    const { results } = buildDebrief({
+      sessionId,
+      topic,
+      confidence,
+      defs,
+      concepts: run.concepts,
+      quotes: bits.quotes,
+      celebrationLine: bits.celebrationLine,
+      existingRecall: bits.existingRecall,
+      freezeRecall: ended,
+    });
+    return results;
+  } finally {
+    client.release();
+  }
+}
+
+/** Concepts due today or earlier for the demo user (the API contract's one hardcoded user). */
+export async function listDueRecall(userId = DEMO_USER_ID, today = new Date()): Promise<DueRecall[]> {
+  const { rows } = await getPool().query<{
+    concept_id: string;
+    name: string;
+    topic: string;
+    due: string;
+    state_after: DueRecall["stateAfter"];
+  }>(
+    `SELECT r.concept_id, c.name, c.topic, r.due_date::text AS due, r.state_after
+       FROM recall r
+       JOIN concepts c ON c.id = r.concept_id
+      WHERE r.user_id = $1 AND r.due_date <= $2::date
+      ORDER BY r.due_date, c.slide, c.id`,
+    [userId, today.toISOString().slice(0, 10)],
+  );
+  return rows.map((r) => ({
+    conceptId: r.concept_id,
+    name: r.name,
+    topic: r.topic,
+    due: r.due,
+    stateAfter: r.state_after,
+  }));
 }

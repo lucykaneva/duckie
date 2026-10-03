@@ -100,6 +100,8 @@ export interface SessionRun {
   silenceStep: 0 | 1 | 2 | 3;
   /** Trace and prediction concepts the student has given an answer to. Until then the leak check guards the answer. */
   committed: string[];
+  /** Spoken /end summary, set once when the session ends. */
+  closingLine?: string;
 }
 
 export interface TurnInput {

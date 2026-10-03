@@ -44,7 +44,7 @@ The user teaches and the duck is the student: curious, a little dim, and secretl
 | Barge-in | Student talks over the duck: duck stops within 300 ms |
 | One move per turn | At most one question, spoken line of 20 words or fewer |
 | Long student turn | Never interrupted; evaluated only when it ends |
-| Filler | If evaluation takes over 1.5 s, say "Hmm, let me think" once |
+| Filler | If `/turn` is still going after 8 s, say "Hmm, let me think" once |
 
 Each concept keeps its own struggle score from 0 to 1. Signals add up across turns, capped at 1.
 
@@ -218,7 +218,7 @@ Dev B owns this and locks it tonight. All routes are Next.js API routes under `/
 | `GET /api/profile` | Learner profile and "Your duck has learned" lines | Frontend, Dev A |
 | `GET /api/review/due` | Concepts due for recall | Frontend |
 
-The filler line ("Hmm, let me think") is the duck page's job: if `/turn` has not answered after 1.5 s, speak it once.
+The filler line ("Hmm, let me think") is the duck page's job: if `/turn` has not answered after `DUCK.fillerAfterMs` (8 s), speak it once. A normal judge+wording call is 2–4 s; 1.5 s made the filler play every turn.
 
 **Concept (what the client sees)**
 
@@ -422,8 +422,8 @@ Judgment calls (these decide what can break, so they are fixed here):
 
 **Phase 3 (6pm to 11pm): orchestration, results, adaptability**
 
-- [ ] **B11 · 6:00 to 7:30 · Full `/turn` orchestration.** Signals from code, then `judgeTurn`, the engine, `wordMove`, and the leak check, with a time limit on each Grok call; on a timeout, evaluate with code-only signals and use the precomputed line. Write one `turns` row per decision (signals, score, level, line). *Needs:* A6 and A7. *Done when:* the worked example runs through the real functions with a row logged per turn.
-- [ ] **B12 · 7:30 to 9:00 · End of session, Illusion Score, recall.** On `/end`, compute states, understanding (Owned counts 1, Assisted counts 0.5), the Illusion Score, the strongest moment and the one concept to revisit, and the recall dates (1 day for Misconception, Explained to or Skipped; 2 for Assisted; 4 for Owned; doubling per successful recall up to 30 days; a failed recall resets to 1). Serve `GET /results` and `GET /review/due`. *Done when:* the results shape in the API contract is returned with real data.
+- [x] **B11 · 6:00 to 7:30 · Full `/turn` orchestration.** Signals from code, then `judgeTurn`, the engine, `wordMove`, and the leak check, with a time limit on each Grok call; on a timeout, evaluate with code-only signals and use the precomputed line. Write one `turns` row per decision (signals, score, level, line). The spoken line is adapted from a situation brief (what they just said, what is still open), not a recited fallback. A greeting is not scored as a missed lecture. *Needs:* A6 and A7. *Done when:* the worked example runs through the real functions with a row logged per turn.
+- [x] **B12 · 7:30 to 9:00 · End of session, Illusion Score, recall.** On `/end`, compute states, understanding (Owned counts 1, Assisted counts 0.5), the Illusion Score, the strongest moment and the one concept to revisit, and the recall dates (1 day for Misconception, Explained to or Skipped; 2 for Assisted; 4 for Owned; doubling per successful recall up to 30 days; a failed recall resets to 1). The wrap-up line is worded from that session. Serve `GET /results` and `GET /review/due`. *Done when:* the results shape in the API contract is returned with real data.
 - [ ] **B13 · 9:00 to 10:30 · Learner profile and config overrides.** Store the profile from `summarizeProfile` (field names agreed with Dev A by 7:30), apply bounded per-user overrides to the config at session start (about 25% from the default), and return the "Your duck has learned" lines with their quotes. *Needs:* A11. *Done when:* two users with different profiles get different thresholds in a test.
 - [ ] **B14 · 10:30 to 11:00 · Decision log view.** A simple page or endpoint that lists every turn with signals, score, level and line, for the debrief and for tuning. *Done when:* a finished session can be read back turn by turn.
 
@@ -498,7 +498,7 @@ The biggest risks are the live voice loop and speed: a judge call plus a wording
 | --- | --- | --- |
 | Grok Voice cannot speak an exact line | Medium | Pass the approved line as a strict "say exactly this" instruction each turn, and keep stored answers out of every prompt until the student commits, so a leak is impossible even if it improvises |
 | No finished-turn transcript or timing from Grok Voice | Medium | Run our own silence timer on the transcript stream (1.2 s, and 3.0 s after an unfinished-thought word) |
-| Judge plus wording is slower than 1.5 s | Medium | One judge call per turn, short prompts, the filler line once, and a code-only evaluation with a precomputed line when a call times out |
+| Judge plus wording is slower than 8 s | Medium | One judge call per turn, short prompts, the filler line once after 8 s, and a code-only evaluation with a precomputed line when a call times out |
 | Judge returns unquoted or invented items | Medium | The quote check drops anything not verbatim in the turn text; code decides every score and level |
 | Reference-code runner unavailable or slow | Medium | Compute the expected answers at extraction time and store them, so the runner is only a check |
 | The duck feels naggy or too easy | High | Tune numbers in the config only, using the spec's tuning plan (ALL5) |

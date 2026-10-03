@@ -8,7 +8,6 @@ import type {
   SessionStart,
   UploadJob,
 } from "@/lib/duck/types";
-import { MOCK_RESULTS } from "@/lib/mock/results";
 
 export type UploadStatus = UploadJob;
 
@@ -262,13 +261,8 @@ export async function endSession(sessionId: string, reason: string): Promise<Duc
 }
 
 export async function getResults(sessionId: string): Promise<SessionResults> {
-  try {
-    return await request<SessionResults>(
-      `/api/sessions/${encodeURIComponent(sessionId)}/results`,
-      "load the results",
-    );
-  } catch {
-    // TODO: remove this fallback once GET /api/sessions/:id/results is reliable.
-    return { ...MOCK_RESULTS, sessionId };
-  }
+  return request<SessionResults>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/results`,
+    "load the results",
+  );
 }

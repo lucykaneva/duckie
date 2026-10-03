@@ -39,7 +39,7 @@ export function withAck(ack: string | undefined, line: string, maxWords: number 
 }
 
 /** "When it stops" becomes "when it stops"; names that start with a capitalised word or code are left alone. */
-function inSentence(name: string): string {
+export function inSentence(name: string): string {
   const trimmed = name.trim().replace(/[.!?]+$/, "");
   return /^[A-Z][a-z]/.test(trimmed) ? trimmed[0].toLowerCase() + trimmed.slice(1) : trimmed;
 }

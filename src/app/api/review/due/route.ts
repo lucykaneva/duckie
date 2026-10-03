@@ -1,5 +1,10 @@
-import { STUB_DUE } from "@/app/api/stub-data";
+import { listDueRecall } from "@/lib/db/sessions";
 
 export async function GET() {
-  return Response.json(STUB_DUE);
+  try {
+    return Response.json(await listDueRecall());
+  } catch (error) {
+    console.error("GET /api/review/due failed", error);
+    return Response.json({ error: "Could not load due concepts" }, { status: 500 });
+  }
 }
