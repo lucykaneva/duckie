@@ -62,6 +62,19 @@ Each concept from the slides keeps its own struggle score from 0 to 1. Signals a
 - **Success resets.** A correct prediction or an unaided explanation resets that concept's score to 0.
 - **Asking for help is not a struggle signal.** "Can you explain it?" is a request; handle it with the ladder in section 4.
 
+**How the code reads these signals (added by Dev B while building `src/lib/engine`; needs Angela's yes)**
+
+These choices fill gaps in the tables above. Getting them wrong causes real bugs, such as skipping a concept the student was only explaining.
+
+- **Fillers are only "um" and "uh".** Stretched or alternate spellings count too ("umm", "uhh", "uhm"). "Like", "so", "and", "er" and "hmm" do not count; "and", "so", "because", "like", "um" and "uh" only extend the end-of-turn wait (section 2). Words are matched whole ("umbrella" is not a filler), and "uh-huh" and "uh-oh" do not count.
+- **"More than 1 per 8 words" means fillers × 8 is greater than the word count.** One "um" fires only in a turn of 7 words or fewer; exactly 1 per 8 words does not fire.
+- **Hedging counts every occurrence** of "I think", "maybe", "kind of" (or "kinda") and "or something" in the turn. Two or more fire the signal.
+- **"I don't know" also matches** "I do not know", "dunno", "no idea", "no clue" and "not sure at all". "Not sure" on its own does not. It can fire on "I don't know if that's right, but..."; we accept that.
+- **"Move on" and "skip" only count as a request, never while the student is explaining.** "Let's move on", "can we skip this one" or a turn that is just "skip" skips the concept. "Then you skip the left half" and "it moves on to the right half" do not. A false match here would mark a concept Skipped and jump to the next topic.
+- **A help request must be addressed to the duck** ("can you explain it", "I need help", "give me a hint", "I'm stuck"). "Let me explain it" is the student teaching, not a request.
+- **"Concept missed" has no quote,** because the student did not say it. It counts only after the explanation turn has ended. Every other judge signal needs a quote that appears word for word in the turn text.
+- **"Earned" uses the score before the success reset.** In turn 5 below, the score was 0.45 going in, so it was earned; a score of 0.3 is not. Scores are rounded so that 0.3 + 0.15 equals 0.45 exactly.
+
 ## Concept states and the help ladder
 
 The score picks how much help the duck gives, from a curious question up to a short explanation. Help only climbs within a concept, one level per failed attempt, and resets when the concept is resolved or skipped.
@@ -235,8 +248,8 @@ The trace question uses the list 1, 3, 5, 7, 9 and target 6, with `mid = (lo + h
 | 1 | "I want to talk about binary search." | Session opens | — | "Ooh! Can you explain it to me? I'm just a duck." |
 | 2 | "You look at the middle. If the target's bigger you go right, otherwise left. You keep halving." | Halving: Owned. Sorted input: missed, 0.3 | L1 | "So I could use it on my pebbles? They're all mixed up." |
 | 3 | "No, they have to be sorted, or you could throw away the half with the target." | Sorted input: Assisted, score reset. Not earned (0.3) | — | "Got it. Test me: 1, 3, 5, 7, 9, looking for 6. Which numbers do you check?" |
-| 4 | "Um, I think 5, then 7, then maybe 9?" | Wrong trace 0.3 + hedging 0.15 + fillers 0.1 = 0.55 | L2 | "Slide 7 shows when it stops. What has to be true to stop?" |
-| 5 | "When there's nothing left to search. After 7 there's nothing left, so just 5 and 7." | Correct. When it stops: Assisted, earned (0.55) | — | "Ooh, nice. You found where it stops." |
+| 4 | "Um, I think 5, then 7, then maybe 9?" | Wrong trace 0.3 + hedging 0.15 = 0.45 (one "um" in 9 words is not more than 1 per 8, so fillers do not fire) | L2 | "Slide 7 shows when it stops. What has to be true to stop?" |
+| 5 | "When there's nothing left to search. After 7 there's nothing left, so just 5 and 7." | Correct. When it stops: Assisted, earned (0.45) | — | "Ooh, nice. You found where it stops." |
 | 6 | (duck moves on after 1.5 s) | Next concept: update step | — | "My friend wrote lo = mid, not mid + 1. Is that okay?" |
 | 7 | "I think that's fine?" | Misconception 0.3 | L1 | "What happens to lo when it's right next to hi?" |
 | 8 | "It stays the same… so it loops forever." | Update step: Assisted. Not earned (0.3) | — | "Got it." |
