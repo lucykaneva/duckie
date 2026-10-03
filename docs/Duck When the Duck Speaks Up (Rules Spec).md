@@ -233,7 +233,7 @@ Each successful recall doubles the interval, up to 30 days, following Burrow's r
 - **The strongest moment** is a celebration if one happened, otherwise the best-ended concept. **The one concept to revisit** is the worst remaining hole (misconception, then explained-to, skipped, not-yet, assisted). All-owned sessions have nothing to revisit.
 - **The spoken wrap-up is one sentence** naming that high point and that hole. Grok words it from the session situation; if Grok is down, a 20-word fallback is spoken. It is never the old stub "You found where it stops. Revisit the update step."
 - **Recall dates** start at 1 day (misconception, explained-to, skipped, not-yet), 2 days (assisted) or 4 days (owned). A later successful recall (owned or assisted again) doubles the interval up to 30 days; a miss resets to 1 day.
-- **`GET /results`** returns the contract shape from live concept state and the student's own quotes. **`GET /review/due`** lists concepts whose due date is today or earlier.
+- **`GET /results`** returns the contract shape from live concept state and the student's own quotes. **`GET /review/due`** lists concepts whose due date is today or earlier. **`GET /log`** lists every turn with signals, score, level and line.
 
 **How the duck adapts** (added by Dev B in B13). Covered by `tests/profile.test.ts`.
 

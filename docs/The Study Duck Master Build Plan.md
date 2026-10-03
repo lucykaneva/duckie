@@ -215,6 +215,7 @@ Dev B owns this and locks it tonight. All routes are Next.js API routes under `/
 | `POST /api/sessions/:id/silence` | Silence timer fired `{ms: 8000, 20000 or 45000}`. Returns the next move, or 409 if there is nothing to do (the student already spoke, or that step was handled) | Dev A |
 | `POST /api/sessions/:id/end` | End the session `{reason}`. Computes scores, recall dates and profile update; returns the wrap-up move | Dev A |
 | `GET /api/sessions/:id/results` | Debrief data | Frontend |
+| `GET /api/sessions/:id/log` | Decision log: every turn with signals, score, level and line | Frontend |
 | `GET /api/profile` | Learner profile and "Your duck has learned" lines | Frontend, Dev A |
 | `GET /api/review/due` | Concepts due for recall | Frontend |
 
@@ -425,7 +426,7 @@ Judgment calls (these decide what can break, so they are fixed here):
 - [x] **B11 · 6:00 to 7:30 · Full `/turn` orchestration.** Signals from code, then `judgeTurn`, the engine, `wordMove`, and the leak check, with a time limit on each Grok call; on a timeout, evaluate with code-only signals and use the precomputed line. Write one `turns` row per decision (signals, score, level, line). The spoken line is adapted from a situation brief (what they just said, what is still open), not a recited fallback. A greeting is not scored as a missed lecture. *Needs:* A6 and A7. *Done when:* the worked example runs through the real functions with a row logged per turn.
 - [x] **B12 · 7:30 to 9:00 · End of session, Illusion Score, recall.** On `/end`, compute states, understanding (Owned counts 1, Assisted counts 0.5), the Illusion Score, the strongest moment and the one concept to revisit, and the recall dates (1 day for Misconception, Explained to or Skipped; 2 for Assisted; 4 for Owned; doubling per successful recall up to 30 days; a failed recall resets to 1). The wrap-up line is worded from that session. Serve `GET /results` and `GET /review/due`. *Done when:* the results shape in the API contract is returned with real data.
 - [x] **B13 · 9:00 to 10:30 · Learner profile and config overrides.** Store the profile from `summarizeProfile` (field names agreed with Dev A by 7:30), apply bounded per-user overrides to the config at session start (about 25% from the default), and return the "Your duck has learned" lines with their quotes. *Needs:* A11. *Done when:* two users with different profiles get different thresholds in a test. Code owns the numbers and the quote check; A11 can still replace the prose. Covered by `tests/profile.test.ts`.
-- [ ] **B14 · 10:30 to 11:00 · Decision log view.** A simple page or endpoint that lists every turn with signals, score, level and line, for the debrief and for tuning. *Done when:* a finished session can be read back turn by turn.
+- [x] **B14 · 10:30 to 11:00 · Decision log view.** A simple page or endpoint that lists every turn with signals, score, level and line, for the debrief and for tuning. *Done when:* a finished session can be read back turn by turn. `GET /api/sessions/:id/log` and `/sessions/[id]/log`. Covered by `tests/decisionLog.test.ts`.
 
 **Phase 4 (11pm to 4am): prove it, seed it, harden it**
 

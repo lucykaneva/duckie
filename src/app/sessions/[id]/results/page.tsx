@@ -182,6 +182,12 @@ export default function SessionResultsPage() {
               </ButtonLink>
             </section>
           ) : null}
+
+          <div className="mt-12">
+            <ButtonLink href={`/sessions/${results.sessionId}/log`} variant="ghost">
+              Decision log
+            </ButtonLink>
+          </div>
         </>
       ) : null}
     </main>

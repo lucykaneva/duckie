@@ -237,6 +237,10 @@ export default function VoiceSpikePage() {
           <a className="underline" href={`/sessions/${liveSessionId}/results`}>
             Open results
           </a>
+          {" · "}
+          <a className="underline" href={`/sessions/${liveSessionId}/log`}>
+            Decision log
+          </a>
         </p>
       ) : null}
     </main>

@@ -3,6 +3,7 @@ import type {
   Course,
   DuckMove,
   Profile,
+  SessionLog,
   Section,
   SectionType,
   SessionResults,
@@ -270,4 +271,11 @@ export async function getResults(sessionId: string): Promise<SessionResults> {
 
 export async function getProfile(): Promise<Profile> {
   return request<Profile>("/api/profile", "load the profile");
+}
+
+export async function getSessionLog(sessionId: string): Promise<SessionLog> {
+  return request<SessionLog>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/log`,
+    "load the decision log",
+  );
 }

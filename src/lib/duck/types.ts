@@ -148,6 +148,33 @@ export interface TurnLogRow {
   line: string;
 }
 
+export type DecisionSource = "student" | "silence" | "steer";
+
+/** One row of the decision log (B14). Never includes a stored answer. */
+export interface DecisionLogRow {
+  id: string;
+  sessionId: string;
+  n: number;
+  source: DecisionSource;
+  text: string;
+  startedAt: string;
+  endedAt: string;
+  signals: string[];
+  scoreAfter: number | null;
+  level: Level | null;
+  moveKind: MoveKind | null;
+  line: string;
+  conceptId: string | null;
+  conceptName: string | null;
+  meta: Record<string, unknown>;
+}
+
+export interface SessionLog {
+  sessionId: string;
+  topic: string;
+  turns: DecisionLogRow[];
+}
+
 export interface Profile {
   userId: string;
   calibration: string;

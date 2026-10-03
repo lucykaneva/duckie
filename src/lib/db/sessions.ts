@@ -1,6 +1,16 @@
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
-import type { DuckMove, DueRecall, Level, MoveKind, Profile, SessionResults, TurnLogRow } from "../duck/types";
+import type {
+  DuckMove,
+  DueRecall,
+  Level,
+  MoveKind,
+  Profile,
+  SessionLog,
+  SessionResults,
+  TurnLogRow,
+} from "../duck/types";
+import { sessionLog } from "../engine/decisionLog";
 import { DEMO_USER_ID } from "../duck/types";
 import { buildDebrief, understandingPercent } from "../engine/debrief";
 import type { ExistingRecall } from "../engine/debrief";
@@ -683,6 +693,63 @@ export async function getSessionResults(sessionId: string): Promise<SessionResul
       duckLearned: profile.duckLearned,
     });
     return results;
+  } finally {
+    client.release();
+  }
+}
+
+/** Every logged row for a session, in order. Null if the session does not exist. */
+export async function getSessionLog(sessionId: string): Promise<SessionLog | null> {
+  const client = await getPool().connect();
+  try {
+    const session = await client.query<{ topic: string }>(`SELECT topic FROM sessions WHERE id = $1`, [sessionId]);
+    if (session.rowCount === 0) return null;
+    const { rows } = await client.query<{
+      id: string;
+      session_id: string;
+      n: number;
+      source: string;
+      text: string;
+      started_at: Date | null;
+      ended_at: Date | null;
+      signals: unknown;
+      score_after: number | null;
+      level: Level | null;
+      move_kind: MoveKind | null;
+      line: string | null;
+      concept_id: string | null;
+      concept_name: string | null;
+      meta: unknown;
+    }>(
+      `SELECT t.id, t.session_id, t.n, t.source, t.text, t.started_at, t.ended_at, t.signals,
+              t.score_after, t.level, t.move_kind, t.line, t.concept_id, c.name AS concept_name, t.meta
+         FROM turns t
+         LEFT JOIN concepts c ON c.id = t.concept_id
+        WHERE t.session_id = $1
+        ORDER BY t.n`,
+      [sessionId],
+    );
+    return sessionLog(
+      sessionId,
+      session.rows[0].topic,
+      rows.map((r) => ({
+        id: r.id,
+        sessionId: r.session_id,
+        n: r.n,
+        source: r.source,
+        text: r.text,
+        startedAt: r.started_at,
+        endedAt: r.ended_at,
+        signals: r.signals,
+        scoreAfter: r.score_after,
+        level: r.level,
+        moveKind: r.move_kind,
+        line: r.line,
+        conceptId: r.concept_id,
+        conceptName: r.concept_name,
+        meta: r.meta,
+      })),
+    );
   } finally {
     client.release();
   }

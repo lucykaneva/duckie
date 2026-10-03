@@ -11,7 +11,7 @@ npm run dev                  # http://localhost:3000
 npm test
 ```
 
-Talk against the real engine at `/dev/voice` (Real server, not Mock) or start from a section. After wrap-up, `/sessions/[id]/results` is the debrief.
+Talk against the real engine at `/dev/voice` (Real server, not Mock) or start from a section. After wrap-up, `/sessions/[id]/results` is the debrief and `/sessions/[id]/log` is every turn.
 
 ## How a session works
 
