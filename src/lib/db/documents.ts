@@ -194,8 +194,8 @@ async function saveExtraction(documentId: string, concepts: ExtractedConcept[], 
       const id = `c_${randomUUID().slice(0, 8)}`;
       await client.query(
         `INSERT INTO concepts
-           (id, section_id, topic, name, slide, kind, misconceptions, check_prompt, fallback_questions)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb)`,
+           (id, section_id, topic, name, slide, kind, misconceptions, check_prompt, fallback_questions, plants_misconception)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10)`,
         [
           id,
           sectionId,
@@ -206,6 +206,7 @@ async function saveExtraction(documentId: string, concepts: ExtractedConcept[], 
           JSON.stringify(c.misconceptions),
           c.checkPrompt,
           JSON.stringify(c.fallbackQuestions),
+          c.plantsMisconception,
         ],
       );
       if (c.secret) {

@@ -1,4 +1,4 @@
-import { DUCK } from "../duck/config";
+import { DUCK, ENGINE } from "../duck/config";
 import type { DuckConfig } from "../duck/config";
 import type {
   ConceptKind,
@@ -10,21 +10,30 @@ import type {
   MoveKind,
   SessionState,
 } from "../duck/types";
+import { mustOpenUp, nextStreak, sessionLimit, skipCheckInDue } from "./brakes";
+import { feedbackFor } from "./celebration";
 import { chooseLevel, higherLevel, stateAfterResolve } from "./ladder";
 import { addSignals, collectSignals, judgeSignals, quoteAppears } from "./score";
 import {
   detectAffirmative,
   detectHelpRequest,
+  detectKeepGoing,
   detectMoveOn,
+  detectTextSignals,
+  detectWrapUpRequest,
+  tokenize,
 } from "./signals";
 import type { SignalKind } from "./signals";
 import {
-  ACK_AFTER_EXPLAIN_LINE,
-  ACK_LINE,
   ACK_SKIP_LINE,
+  ALL_ASKED_PROPOSAL_LINE,
+  CHECK_IN_LINE,
+  LIMIT_PROPOSAL_LINE,
   OFFER_SKIP_LINE,
   OPENING_LINE,
+  OPEN_PROMPT_LINE,
   WRAP_UP_LINE,
+  celebrationLine,
   withAck,
 } from "./wording";
 
@@ -40,6 +49,8 @@ export interface ConceptDef {
   misconceptions: string[];
   /** The question the duck opens the concept with (the trace question, the planted misconception). */
   checkPrompt: string | null;
+  /** The check question states a wrong claim for the student to catch ("My friend wrote lo = mid..."). */
+  plantsMisconception?: boolean;
   /** Precomputed lines, used until Dev A's wordMove is wired in. */
   fallbackQuestions: Partial<Record<HelpLevel, string>>;
 }
@@ -59,6 +70,9 @@ export interface ConceptRun {
   celebrated: boolean;
 }
 
+/** What the duck is waiting for the student to answer, apart from a content question. */
+export type PendingAsk = "check_in" | "wrap_proposal";
+
 export interface SessionRun {
   /** In deck order (slide, then id). */
   concepts: ConceptRun[];
@@ -67,6 +81,23 @@ export interface SessionRun {
   lastMoveKind: MoveKind | null;
   /** Finished student turns so far. */
   turnCount: number;
+  /** What the duck last said that expects an answer; a rephrase after silence repeats it. */
+  lastLine: string;
+  /** Back-to-back duck questions with no acknowledgement between (the question-streak brake). */
+  questionStreak: number;
+  /** The "Keep going or wrap up?" check after two skips has been asked (it is asked once). */
+  skipCheckInAsked: boolean;
+  /** The duck has proposed wrapping up (it is proposed once). */
+  wrapUpProposed: boolean;
+  pending: PendingAsk | null;
+  /** The student agreed to wrap up; the client now calls POST /end. */
+  closing: boolean;
+  /** Epoch ms the session started, and the pause bookkeeping that keeps pauses out of the 8-minute limit. */
+  startedAtMs: number;
+  pausedAtMs: number | null;
+  pausedMs: number;
+  /** The highest silence step (1 = 8 s, 2 = 20 s, 3 = 45 s) handled since the student last spoke. */
+  silenceStep: 0 | 1 | 2 | 3;
 }
 
 export interface TurnInput {
@@ -75,6 +106,8 @@ export interface TurnInput {
   judge: JudgeResult;
   /** The code runner's verdict on a committed trace or prediction (B10). */
   answer?: { conceptId: string; correct: boolean };
+  /** When the turn finished, in epoch ms. Used for the session-length brake. Defaults to the session start. */
+  nowMs?: number;
 }
 
 export interface ResolvedConcept {
@@ -102,7 +135,7 @@ const progress = (concepts: ConceptRun[]): ConceptProgress[] =>
   concepts.map((c) => ({ id: c.conceptId, state: c.state, score: c.score }));
 
 /** A fresh session: every concept Not yet, nothing asked. */
-export function freshSession(defs: ConceptDef[]): SessionRun {
+export function freshSession(defs: ConceptDef[], startedAtMs = 0): SessionRun {
   return {
     concepts: defs.map((d) => ({
       conceptId: d.id,
@@ -117,6 +150,16 @@ export function freshSession(defs: ConceptDef[]): SessionRun {
     focusConceptId: null,
     lastMoveKind: null,
     turnCount: 0,
+    lastLine: OPENING_LINE,
+    questionStreak: 0,
+    skipCheckInAsked: false,
+    wrapUpProposed: false,
+    pending: null,
+    closing: false,
+    startedAtMs,
+    pausedAtMs: null,
+    pausedMs: 0,
+    silenceStep: 0,
   };
 }
 
@@ -136,16 +179,39 @@ interface PlannedMove {
   kind: MoveKind;
   level: Level;
   line: string;
-  /** The concept this move is about; undefined for the wrap-up. */
+  /** The concept this move is about and counts a move against; undefined for moves that are not about one. */
   concept?: ConceptRun;
+  /** The concept id to report when `concept` is not set (open prompts stay on the focus concept). */
+  conceptId?: string;
   /** Counts as a help level on the concept (L1 to L4). */
   help: boolean;
   sessionState: SessionState;
+  /** Set when this move asks something other than a content question. */
+  pending?: PendingAsk;
+  /** The duck is proposing to wrap up (all concepts asked, or a session limit). */
+  proposal?: boolean;
+  /** The student has agreed to wrap up; this is the closing line. */
+  close?: boolean;
 }
+
+const judgeIsEmpty = (j: JudgeResult): boolean =>
+  j.covered.length === 0 &&
+  j.missed.length === 0 &&
+  j.misconceptions.length === 0 &&
+  j.contradictions.length === 0 &&
+  j.vague.length === 0;
 
 /**
  * Process one finished student turn: update every open concept's score, resolve
  * or skip concepts, then make exactly one move. Pure; the caller loads and saves state.
+ *
+ * Order of precedence (brakes override the ladder, spec section 5):
+ *   1. the session is closing, or the student asks to wrap up
+ *   2. the student answers a wrap-up proposal or the two-skip check-in
+ *   3. the first turn back after a pause that is only "I'm back"
+ *   4. the ladder (skip, resolve, struggle) picks the next move
+ *   5. two-skip check-in, session limit, then question streak may replace that move
+ *   6. a celebration goes first, and the planned move follows as `then`
  */
 export function processTurn(
   defs: ConceptDef[],
@@ -157,19 +223,107 @@ export function processTurn(
   const concepts: ConceptRun[] = session.concepts.map((c) => ({ ...c }));
   const orderOf = new Map(concepts.map((c, i) => [c.conceptId, i]));
   const text = input.text;
+  const nowMs = input.nowMs ?? session.startedAtMs;
+
+  // Time: a pause does not count toward the 8-minute limit.
+  const wasPaused = session.pausedAtMs !== null;
+  const pausedMs = session.pausedMs + (wasPaused ? Math.max(0, nowMs - (session.pausedAtMs as number)) : 0);
+  const activeMs = Math.max(0, nowMs - session.startedAtMs - pausedMs);
+
   // "Missed" counts only when the student's explanation turn has ended: the first finished turn.
   const explanationTurnEnded = session.turnCount === 0;
 
   const focusRun = concepts.find((c) => c.conceptId === session.focusConceptId);
   const focus = focusRun && isOpen(focusRun) ? focusRun : undefined;
 
+  const defOf = (c: ConceptRun): ConceptDef | undefined => defById.get(c.conceptId);
+  const fallbackConceptId = session.focusConceptId ?? concepts[0]?.conceptId ?? "";
+  const finishedConcepts = (): number => concepts.filter((c) => !isOpen(c)).length;
+
+  /** The state every outcome starts from: this turn counted, the pause (if any) over, silence steps reset. */
+  const carried = (): SessionRun => ({
+    ...session,
+    concepts,
+    turnCount: session.turnCount + 1,
+    pausedAtMs: null,
+    pausedMs,
+    silenceStep: 0,
+  });
+
+  const closeOutcome = (): TurnOutcome => {
+    const move: DuckMove = {
+      kind: "wrap_up",
+      level: "L0",
+      conceptId: fallbackConceptId,
+      line: WRAP_UP_LINE,
+      sessionState: "wrapping_up",
+      concepts: progress(concepts),
+    };
+    return {
+      session: { ...carried(), lastMoveKind: "wrap_up", lastLine: WRAP_UP_LINE, pending: null, closing: true, questionStreak: 0 },
+      move,
+      signals: [],
+      scoreAfter: focus?.score ?? 0,
+      resolved: [],
+    };
+  };
+
+  // 1. Already closing, or the student asks to wrap up.
+  if (session.closing || detectWrapUpRequest(text)) return closeOutcome();
+
+  // 2. An answer to a wrap-up proposal or to "Keep going or wrap up?".
+  if (session.pending === "wrap_proposal" && detectAffirmative(text)) return closeOutcome();
+
+  // 3. Back from a pause with nothing but "I'm back": repeat the question, score nothing.
+  if (
+    wasPaused &&
+    tokenize(text).length <= ENGINE.shortTurnMaxWords &&
+    judgeIsEmpty(input.judge) &&
+    !input.answer &&
+    detectTextSignals(text, config).length === 0 &&
+    !detectMoveOn(text) &&
+    !detectHelpRequest(text) &&
+    !detectAffirmative(text)
+  ) {
+    const repeatKind: MoveKind =
+      session.lastMoveKind === "offer_skip" || session.lastMoveKind === "check_in"
+        ? session.lastMoveKind
+        : "rephrase";
+    const move: DuckMove = {
+      kind: repeatKind,
+      level: focus?.levelReached ?? "L0",
+      conceptId: fallbackConceptId,
+      line: session.lastLine,
+      sessionState: session.pending === "wrap_proposal" ? "wrapping_up" : "active",
+      concepts: progress(concepts),
+    };
+    return {
+      session: { ...carried(), lastMoveKind: repeatKind },
+      move,
+      signals: [],
+      scoreAfter: focus?.score ?? 0,
+      resolved: [],
+    };
+  }
+
+  // The duck asked a check-in or proposal and the student gave a short reply ("keep going", "no", "sure"):
+  // that is not an answer about a concept, so nothing is scored and the duck carries on. A long reply is
+  // the student explaining; it is scored as usual and counts as turning the proposal down.
+  const repliedToAsk =
+    session.pending !== null &&
+    (detectKeepGoing(text) ||
+      detectAffirmative(text) ||
+      (tokenize(text).length <= ENGINE.shortTurnMaxWords && judgeIsEmpty(input.judge)));
+
   const resolved: ResolvedConcept[] = [];
   const appliedAll = new Set<SignalKind>();
   let focusApplied: SignalKind[] = [];
   let ack: string | undefined;
   let helpRequested = false;
+  let skippedNow = false;
 
   const wantsSkip =
+    !repliedToAsk &&
     focus !== undefined &&
     (detectMoveOn(text) ||
       (session.lastMoveKind === "offer_skip" && detectAffirmative(text)));
@@ -177,8 +331,9 @@ export function processTurn(
   if (wantsSkip && focus) {
     focus.state = "skipped";
     focus.skipped = true;
+    skippedNow = true;
     ack = ACK_SKIP_LINE;
-  } else {
+  } else if (!repliedToAsk) {
     helpRequested = focus !== undefined && detectHelpRequest(text);
 
     for (const c of concepts) {
@@ -216,10 +371,7 @@ export function processTurn(
           previous,
           levelReached: c.levelReached,
         });
-        if (isFocus) {
-          ack = c.state === "explained_to" ? ACK_AFTER_EXPLAIN_LINE : ACK_LINE;
-          focusApplied = [];
-        }
+        if (isFocus) focusApplied = [];
         continue;
       }
 
@@ -234,7 +386,32 @@ export function processTurn(
     }
   }
 
-  const defOf = (c: ConceptRun): ConceptDef | undefined => defById.get(c.conceptId);
+  // What to say about the focus concept if it was just resolved: celebrate, or acknowledge.
+  let celebrate: { caught: boolean; concept: ConceptRun } | undefined;
+  const focusResolved = focus ? resolved.find((r) => r.conceptId === focus.conceptId) : undefined;
+  if (focus && focusResolved) {
+    const feedback = feedbackFor(
+      {
+        previous: focusResolved.previous,
+        explainedTo: focusResolved.state === "explained_to",
+        unaided: focusResolved.levelReached === "L0",
+        plantsMisconception: defOf(focus)?.plantsMisconception === true,
+        alreadyCelebrated: focus.celebrated,
+      },
+      config,
+    );
+    if (feedback.kind === "celebrate") {
+      celebrate = { caught: feedback.caught, concept: focus };
+      focus.celebrated = true;
+    } else {
+      ack = feedback.line;
+    }
+  }
+
+  // Counted after this turn's resolutions and skips. Answering a check-in at the limit already
+  // answers the question a proposal would ask, so the duck does not propose straight after it.
+  const limit = sessionLimit(finishedConcepts(), activeMs, config);
+  let wrapUpProposed = session.wrapUpProposed || (session.pending !== null && limit !== null);
 
   const helpLine = (c: ConceptRun, level: Level): string | undefined =>
     level === "L0" ? undefined : defOf(c)?.fallbackQuestions[level];
@@ -278,7 +455,10 @@ export function processTurn(
       config,
     );
 
-  /** Pick the next concept: struggling ones first, then the next unasked one in deck order. */
+  /**
+   * Pick the next concept: struggling ones first, then the next unasked one in deck order.
+   * With nothing left it proposes wrapping up, or closes if the student already turned that down.
+   */
   const planNext = (): PlannedMove => {
     const open = concepts.filter(isOpen);
 
@@ -305,17 +485,80 @@ export function processTurn(
       };
     }
 
-    return { kind: "wrap_up", level: "L0", line: WRAP_UP_LINE, help: false, sessionState: "wrapping_up" };
+    // Nothing left to ask. The duck never carries on by itself.
+    if (wrapUpProposed) {
+      return { kind: "wrap_up", level: "L0", line: WRAP_UP_LINE, help: false, sessionState: "wrapping_up", close: true };
+    }
+    return {
+      kind: "check_in",
+      level: "L0",
+      line: ALL_ASKED_PROPOSAL_LINE,
+      help: false,
+      sessionState: "wrapping_up",
+      pending: "wrap_proposal",
+      proposal: true,
+    };
   };
 
+  // 4. The ladder picks the next move.
   let planned: PlannedMove;
-  if (focus && isOpen(focus)) {
+  let movingOn = false;
+  if (focus && isOpen(focus) && !repliedToAsk) {
     const level = levelFor(focus, !helpRequested, helpRequested);
     // L0 means no sign of struggle: say nothing about it and move on.
-    planned = level === "L0" ? planNext() : planHelp(focus, level);
+    if (level === "L0") {
+      planned = planNext();
+      movingOn = true;
+    } else {
+      planned = planHelp(focus, level);
+    }
   } else {
     planned = planNext();
+    movingOn = true;
   }
+
+  const celebrating = celebrate !== undefined;
+  // The student has just been answered (acknowledged or celebrated), so this is not another bare question.
+  const afterResponse = ack !== undefined || celebrating;
+  const skips = concepts.filter((c) => c.skipped).length;
+
+  // 5. Brakes that replace the planned move.
+  if (planned.close) {
+    // Nothing more to ask and the student already said no to wrapping up: close.
+  } else if (skippedNow && skipCheckInDue(skips, session.skipCheckInAsked, config) && !planned.proposal) {
+    planned = {
+      kind: "check_in",
+      level: "L0",
+      line: CHECK_IN_LINE,
+      conceptId: fallbackConceptId,
+      help: false,
+      sessionState: "active",
+      pending: "check_in",
+    };
+  } else if (movingOn && !wrapUpProposed && limit !== null && !planned.proposal) {
+    planned = {
+      kind: "check_in",
+      level: "L0",
+      line: LIMIT_PROPOSAL_LINE,
+      conceptId: fallbackConceptId,
+      help: false,
+      sessionState: "wrapping_up",
+      pending: "wrap_proposal",
+      proposal: true,
+    };
+  } else if (mustOpenUp(session.questionStreak, planned.kind, afterResponse, config)) {
+    planned = {
+      kind: "open",
+      level: focus?.levelReached ?? "L0",
+      line: OPEN_PROMPT_LINE,
+      conceptId: fallbackConceptId,
+      help: false,
+      sessionState: "active",
+    };
+  }
+
+  if (planned.proposal) wrapUpProposed = true;
+  const skipCheckInAsked = session.skipCheckInAsked || planned.pending === "check_in";
 
   if (planned.concept) {
     planned.concept.moves += 1;
@@ -324,22 +567,46 @@ export function processTurn(
     }
   }
 
-  const targetId = planned.concept?.conceptId ?? session.focusConceptId ?? concepts[0]?.conceptId ?? "";
-  const move: DuckMove = {
+  const plannedMove = (withAckLine: string | undefined): DuckMove => ({
     kind: planned.kind,
     level: planned.level,
-    conceptId: targetId,
-    line: withAck(ack, planned.line, config.maxDuckWords),
+    conceptId: planned.concept?.conceptId ?? planned.conceptId ?? fallbackConceptId,
+    line: withAck(withAckLine, planned.line, config.maxDuckWords),
     sessionState: planned.sessionState,
     concepts: progress(concepts),
-  };
+  });
+
+  // 6. A celebration is its own move; the planned move follows after the pause.
+  let move: DuckMove;
+  if (celebrate) {
+    const celebrateDef = defOf(celebrate.concept);
+    move = {
+      kind: "celebrate",
+      level: celebrate.concept.levelReached,
+      conceptId: celebrate.concept.conceptId,
+      line: celebrationLine(celebrateDef?.name ?? "that", celebrate.caught, config.maxDuckWords),
+      sessionState: "active",
+      concepts: progress(concepts),
+      then: plannedMove(undefined),
+    };
+  } else {
+    move = plannedMove(ack);
+  }
+
+  const spoken = move.then ?? move;
+  const targetId = planned.concept?.conceptId ?? session.focusConceptId;
 
   return {
     session: {
-      concepts,
-      focusConceptId: planned.concept?.conceptId ?? session.focusConceptId,
-      lastMoveKind: move.kind,
-      turnCount: session.turnCount + 1,
+      ...carried(),
+      focusConceptId: targetId,
+      lastMoveKind: spoken.kind,
+      lastLine: spoken.line,
+      questionStreak: nextStreak(session.questionStreak, spoken.kind, afterResponse),
+      skipCheckInAsked,
+      wrapUpProposed,
+      pending: planned.pending ?? null,
+      closing: planned.close === true,
     },
     move,
     signals: focus ? focusApplied : [...appliedAll],

@@ -13,6 +13,8 @@ export interface SeedConcept {
   kind: "explain" | "trace" | "predict";
   misconceptions: string[];
   checkPrompt: string;
+  /** The check question states a wrong claim for the student to catch (B9). */
+  plantsMisconception?: boolean;
   fallbackQuestions: { L1: string; L2: string; L3: string; L4: string };
   /** Server only. Goes to concept_secrets, never to an API response. */
   secret?: { referenceCode: string; expectedAnswer: string };
@@ -100,6 +102,7 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     kind: "explain",
     misconceptions: ["lo = mid is fine"],
     checkPrompt: "My friend wrote lo = mid, not mid + 1. Is that okay?",
+    plantsMisconception: true,
     fallbackQuestions: {
       L1: "What happens to lo when it's right next to hi?",
       L2: "Slide 9 shows the update step. What does it set lo to?",

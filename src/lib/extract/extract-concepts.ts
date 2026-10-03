@@ -66,6 +66,7 @@ Each concept has these fields:
 - "kind": "explain" for an idea the student should explain in words. "trace" or "predict" ONLY when the page contains a small algorithm or code whose result the student can work out by hand. Otherwise "explain".
 - "misconceptions": 0 to 3 short wrong beliefs students commonly hold about this concept, written as the wrong belief itself.
 - "checkPrompt": the one question the duck asks first. At most 15 words (aim for 8 to 12), exactly one question mark, written as the duck talking to a student. It must not contain or hint at the answer.
+- "plantsMisconception": optional. true only for kind "explain" when the "checkPrompt" states a wrong claim for the student to catch (for example "My friend says X. Is that right?") instead of asking an open question; the claim must also be listed in "misconceptions". Leave it out otherwise.
 - "fallbackQuestions": an object with four lines the duck can say, each at most 20 words (aim for 12 to 16, and count them) with exactly one question mark:
   - "L1": a curious, naive question that tests the gap without naming it.
   - "L2": points to the page without giving the answer. It must say "Slide N" using the same number as "slide".

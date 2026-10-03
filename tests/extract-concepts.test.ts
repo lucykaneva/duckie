@@ -58,6 +58,21 @@ describe("validating Grok's concept list", () => {
     expect(concepts[0].secret).toBeUndefined();
   });
 
+  it("keeps the planted-misconception flag only for explain questions that list a misconception", () => {
+    const planted = good({ misconceptions: ["lo = mid is fine"], plantsMisconception: true });
+    expect(validateExtraction({ concepts: [planted] }, 10).concepts[0].plantsMisconception).toBe(true);
+    // No misconception to catch, or a flag that is not exactly true: the flag is dropped.
+    expect(
+      validateExtraction({ concepts: [good({ misconceptions: [], plantsMisconception: true })] }, 10).concepts[0]
+        .plantsMisconception,
+    ).toBe(false);
+    expect(
+      validateExtraction({ concepts: [good({ misconceptions: ["x"], plantsMisconception: "yes" })] }, 10).concepts[0]
+        .plantsMisconception,
+    ).toBe(false);
+    expect(validateExtraction({ concepts: [good()] }, 10).concepts[0].plantsMisconception).toBe(false);
+  });
+
   it("returns nothing for a reply with no concepts array", () => {
     expect(validateExtraction({ nope: 1 }, 10).concepts).toEqual([]);
     expect(validateExtraction(null, 10).concepts).toEqual([]);

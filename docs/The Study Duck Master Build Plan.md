@@ -212,7 +212,7 @@ Dev B owns this and locks it tonight. All routes are Next.js API routes under `/
 | `GET /api/sections/:id/concepts` | Concept list with misconceptions and slide tags (no answers) | Frontend, Dev A |
 | `POST /api/sessions` | Start `{sectionId, topic, confidence}`. Returns the session and the opening move | Frontend, Dev A |
 | `POST /api/sessions/:id/turn` | One finished student turn `{text, startedAt, endedAt, silenceBeforeMs}`. Returns the next move | Dev A |
-| `POST /api/sessions/:id/silence` | Silence timer fired `{ms: 8000, 20000 or 45000}`. Returns the next move | Dev A |
+| `POST /api/sessions/:id/silence` | Silence timer fired `{ms: 8000, 20000 or 45000}`. Returns the next move, or 409 if there is nothing to do (the student already spoke, or that step was handled) | Dev A |
 | `POST /api/sessions/:id/end` | End the session `{reason}`. Computes scores, recall dates and profile update; returns the wrap-up move | Dev A |
 | `GET /api/sessions/:id/results` | Debrief data | Frontend |
 | `GET /api/profile` | Learner profile and "Your duck has learned" lines | Frontend, Dev A |
@@ -247,6 +247,17 @@ The filler line ("Hmm, let me think") is the duck page's job: if `/turn` has not
 ```
 
 `sessionState` is `active`, `paused` or `wrapping_up`. The line is already leak-checked and 20 words or fewer. Dev A speaks it as is.
+
+**Move kinds Dev A must handle (B9)**
+
+| `kind` | What it is | What Dev A does |
+| --- | --- | --- |
+| `question`, `rephrase`, `open` | A question, the same question again, or "What's the next piece of it?" | Speak it and arm the silence timers |
+| `celebrate` | Praise for a concept. Has `then`, the next move | Speak `line`, wait until the audio ends plus 1.5 s (`DUCK.afterCelebrationMs`), then speak `then.line` and arm the silence timers after that. If the student starts talking in the gap, drop `then` and treat what they say as their next turn |
+| `offer_skip` | "Want to skip this one?" | Speak it. A plain "yes" from the student skips the concept |
+| `check_in` | A question the student answers yes, no or in a few words: "Keep going or wrap up?", or a proposal to wrap up (`sessionState: "wrapping_up"`) | Speak it and keep the session open. Do not finish. Send the reply to `/turn` like any other turn |
+| `wrap_up` | The student agreed to stop. The line is "Okay, let's wrap up." | Speak it, then call `POST /end`, which returns the closing summary to speak. Then finish. Repeated `/turn` calls keep returning `wrap_up` |
+| `pause` | 45 s of silence. `sessionState` is `paused` | Speak it, stop the timers, wait for the student. Their next turn resumes the session |
 
 **Results (what the designer's debrief reads)**
 

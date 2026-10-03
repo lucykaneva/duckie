@@ -57,6 +57,12 @@ export interface DuckMove {
   line: string;
   sessionState: SessionState;
   concepts: ConceptProgress[];
+  /**
+   * A follow-up move the duck makes on its own after this one (B9). Only set on a
+   * `celebrate` move: speak `line`, wait for the audio to end plus DUCK.afterCelebrationMs,
+   * then speak `then.line`. The server has already counted `then` as asked.
+   */
+  then?: DuckMove;
 }
 
 export interface SessionStart {

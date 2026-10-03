@@ -44,6 +44,15 @@ export const DUCK = {
 
 export type DuckConfig = typeof DUCK;
 
+// Engine choices the rules spec does not give a number for (B9). Tune here, never in logic.
+export const ENGINE = {
+  /**
+   * A turn this short with nothing judged is not an answer to a concept: it is "I'm back" after a pause,
+   * or a reply like "keep going" to a check-in.
+   */
+  shortTurnMaxWords: 3,
+};
+
 // Upload and extraction (B8). Not part of the rules spec; tune here, never in logic.
 export const EXTRACT = {
   /** A page with fewer non-space characters than this is treated as an image page. */

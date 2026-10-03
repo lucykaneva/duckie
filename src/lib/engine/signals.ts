@@ -6,8 +6,10 @@ import {
   FILLER_WORD,
   HEDGE_PATTERNS,
   HELP_REQUEST_PATTERNS,
+  KEEP_GOING_PATTERNS,
   MOVE_ON_PATTERNS,
   NOT_FILLER_PAIRS,
+  WRAP_UP_PATTERNS,
 } from "./phrases";
 
 /** The signals in the spec's table. Keys match DUCK.weights. */
@@ -72,6 +74,18 @@ export function detectHeavyFillers(text: string, config: TextSignalConfig = DUCK
 export function detectMoveOn(text: string): boolean {
   const t = normalize(text);
   return MOVE_ON_PATTERNS.some((pattern) => pattern.test(t));
+}
+
+/** "Let's wrap up", "I'm done". Never fires inside an explanation. */
+export function detectWrapUpRequest(text: string): boolean {
+  const t = normalize(text);
+  return WRAP_UP_PATTERNS.some((pattern) => pattern.test(t));
+}
+
+/** "Keep going", "one more", "no". Only meaningful right after a check-in or a wrap-up proposal. */
+export function detectKeepGoing(text: string): boolean {
+  const t = normalize(text);
+  return KEEP_GOING_PATTERNS.some((pattern) => pattern.test(t));
 }
 
 /** A plain "yes" or "okay" (the whole turn). Only meaningful right after the duck offers to skip. */

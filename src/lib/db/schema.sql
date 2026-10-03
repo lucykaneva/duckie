@@ -50,6 +50,8 @@ CREATE TABLE concepts (
   kind TEXT NOT NULL CHECK (kind IN ('explain', 'trace', 'predict')),
   misconceptions JSONB NOT NULL DEFAULT '[]'::jsonb,
   check_prompt TEXT,
+  -- The check question states a wrong claim for the student to catch (B9: "caught it on their own").
+  plants_misconception BOOLEAN NOT NULL DEFAULT false,
   fallback_questions JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
@@ -66,7 +68,9 @@ CREATE TABLE sessions (
   confidence INTEGER CHECK (confidence BETWEEN 1 AND 5),
   started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   ended_at TIMESTAMPTZ,
-  end_reason TEXT
+  end_reason TEXT,
+  -- The engine's session-level state between turns (B9): focus, last move, brakes. See src/lib/db/sessions.ts.
+  engine JSONB
 );
 
 CREATE TABLE concept_state (
@@ -105,6 +109,9 @@ CREATE TABLE turns (
   line TEXT,
   -- The concept the duck's move was about. The next turn starts from it (B7).
   concept_id TEXT REFERENCES concepts (id),
+  -- n numbers every logged row in the session. 'student' rows hold the student's words and the duck's reply;
+  -- 'silence' rows are the duck's reply to a silence timer; 'steer' rows are the follow-up after a celebration.
+  source TEXT NOT NULL DEFAULT 'student' CHECK (source IN ('student', 'silence', 'steer')),
   UNIQUE (session_id, n)
 );
 

@@ -60,3 +60,22 @@ export const HELP_REQUEST_PATTERNS: RegExp[] = [
   /\b(?:a|any|some) hints?\b/,
   /\b(?:i'm|i am|im) stuck\b/,
 ];
+
+/**
+ * Asking to stop the session. Explicit requests only: "let's wrap up", "I want to stop",
+ * or a turn that is just "wrap up" / "I'm done". "I'm done with halving" is the student explaining.
+ */
+export const WRAP_UP_PATTERNS: RegExp[] = [
+  /\b(?:let'?s|lets|can we|could we|shall we|i want to|i'd like to|i would like to|please|time to)\s+(?:wrap(?: it| this| things)? up|call it (?:a day|quits)|end (?:the|this) session)\b/,
+  /\b(?:let'?s|lets|can we|could we|shall we|i want to|i'd like to|i would like to|please|time to)\s+(?:stop|finish|end)(?: here| now| up| for (?:today|now))?[.!?]*$/,
+  /^(?:(?:ok(?:ay)?|yes|yeah)[,. ]+)?(?:wrap(?: it| this)? up|(?:i'?m|i am) (?:done|finished)|that'?s (?:enough|all)|done|stop|finish)(?: please| for today| now)?[.!]*$/,
+];
+
+/** "Keep going", "one more", "not yet": the answer to "Keep going or wrap up?" or "Ready to wrap up?". */
+export const KEEP_GOING_PATTERNS: RegExp[] = [
+  /\bkeep (?:going|on)\b/,
+  /\b(?:let'?s |lets )?(?:continue|carry on|go on)\b/,
+  /\bone more\b/,
+  /\bnot (?:yet|ready)\b/,
+  /^(?:no|nope|nah)(?: thanks| thank you)?[.!, ]*$/,
+];

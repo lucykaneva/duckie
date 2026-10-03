@@ -31,12 +31,13 @@ async function seed() {
     for (const c of SEED_CONCEPTS) {
       await client.query(
         `INSERT INTO concepts
-           (id, section_id, topic, name, slide, kind, misconceptions, check_prompt, fallback_questions)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb)
+           (id, section_id, topic, name, slide, kind, misconceptions, check_prompt, fallback_questions, plants_misconception)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10)
          ON CONFLICT (id) DO UPDATE SET
            topic = EXCLUDED.topic, name = EXCLUDED.name, slide = EXCLUDED.slide,
            kind = EXCLUDED.kind, misconceptions = EXCLUDED.misconceptions,
            check_prompt = EXCLUDED.check_prompt,
+           plants_misconception = EXCLUDED.plants_misconception,
            fallback_questions = EXCLUDED.fallback_questions`,
         [
           c.id,
@@ -48,6 +49,7 @@ async function seed() {
           JSON.stringify(c.misconceptions),
           c.checkPrompt,
           JSON.stringify(c.fallbackQuestions),
+          c.plantsMisconception === true,
         ],
       );
 

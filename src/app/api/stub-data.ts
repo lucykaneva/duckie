@@ -95,37 +95,6 @@ export const STUB_DUE: DueRecall[] = [
   },
 ];
 
-export function silenceMove(ms: number): DuckMove {
-  if (ms >= 45_000) {
-    return {
-      kind: "pause",
-      level: "L1",
-      conceptId: STUB_CONCEPT.id,
-      line: "I'll be here when you're ready.",
-      sessionState: "paused",
-      concepts: STUB_MOVE.concepts,
-    };
-  }
-  if (ms >= 20_000) {
-    return {
-      kind: "offer_skip",
-      level: "L1",
-      conceptId: STUB_CONCEPT.id,
-      line: "Want to skip this one?",
-      sessionState: "active",
-      concepts: STUB_MOVE.concepts,
-    };
-  }
-  return {
-    kind: "rephrase",
-    level: "L1",
-    conceptId: STUB_CONCEPT.id,
-    line: "So I could use it on my pebbles? They're all mixed up.",
-    sessionState: "active",
-    concepts: STUB_MOVE.concepts,
-  };
-}
-
 export const STUB_WRAP_UP: DuckMove = {
   kind: "wrap_up",
   level: "L0",

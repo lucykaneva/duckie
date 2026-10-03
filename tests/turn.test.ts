@@ -22,6 +22,7 @@ const defs: ConceptDef[] = SEED_CONCEPTS.map((c) => ({
   kind: c.kind,
   misconceptions: c.misconceptions,
   checkPrompt: c.checkPrompt,
+  plantsMisconception: c.plantsMisconception,
   fallbackQuestions: c.fallbackQuestions,
 }));
 
@@ -115,9 +116,12 @@ describe("worked example (binary search)", () => {
     });
     expect(stateOf(o, "c_14")).toMatchObject({ state: "assisted", score: 0, levelReached: "L2" });
     expect(o.resolved[0].previous).toBeGreaterThanOrEqual(DUCK.earnedScore); // earned
-    expect(o.move).toMatchObject({ level: "L0", conceptId: "c_15" });
-    expect(o.move.line).toBe("Got it. My friend wrote lo = mid, not mid + 1. Is that okay?");
-    lines.push(o.move.line);
+    // Earned, so the duck celebrates; 1.5 s later it moves on to the update step (spec turns 5 and 6).
+    expect(o.move).toMatchObject({ kind: "celebrate", conceptId: "c_14" });
+    expect(o.move.line).toBe("Ooh, nice. You got when it stops.");
+    expect(o.move.then).toMatchObject({ kind: "question", level: "L0", conceptId: "c_15" });
+    expect(o.move.then!.line).toBe("My friend wrote lo = mid, not mid + 1. Is that okay?");
+    lines.push(o.move.line, o.move.then!.line);
     s = o.session;
 
     // 5. Misconception on the update step -> L1.
@@ -146,7 +150,8 @@ describe("worked example (binary search)", () => {
       judge: { covered: [{ conceptId: "c_16", quote: "About twenty" }] },
     });
     expect(stateOf(o, "c_16").state).toBe("owned");
-    expect(o.move).toMatchObject({ kind: "wrap_up", sessionState: "wrapping_up" });
+    expect(o.move).toMatchObject({ kind: "check_in", sessionState: "wrapping_up" });
+    expect(o.session.pending).toBe("wrap_proposal");
     lines.push(o.move.line);
 
     expect(o.session.concepts.map((c) => c.state)).toEqual([
@@ -267,22 +272,23 @@ describe("the ladder in a session", () => {
     expect(o.move).toMatchObject({ conceptId: "c_12", level: "L3" });
   });
 
-  it("climbs L1, L2, L3, then L4 as the final move, then offers to move on", () => {
+  it("climbs L1, L2, L3, then L4 as the final move, then offers to move on (an open prompt breaks up the questions)", () => {
     // Explanation turn: only sorted input is missed -> L1.
     let o = run(freshSession(defs), "Binary search is about lists.", {
       judge: { missed: [{ conceptId: "c_12" }] },
     });
     const seen = [o.move];
-    // Four more turns that do not resolve it and show no new signals.
-    for (let i = 0; i < 4; i++) {
+    // Five more turns that do not resolve it and show no new signals.
+    for (let i = 0; i < 5; i++) {
       o = run(o.session, "the list thing");
       seen.push(o.move);
     }
-    expect(seen.map((m) => m.kind)).toEqual(["question", "question", "question", "question", "offer_skip"]);
-    expect(seen.map((m) => m.level)).toEqual(["L1", "L2", "L3", "L4", "L4"]);
-    expect(seen[3].line).toBe(line("c_12", "L4"));
-    expect(seen[4].line).toBe("Want to skip this one?");
-    expect(stateOf(o, "c_12")).toMatchObject({ levelReached: "L4", failedAttempts: 4 });
+    // After two questions in a row the third move is the open prompt (spec section 5); it does not use up a ladder move.
+    expect(seen.map((m) => m.kind)).toEqual(["question", "question", "open", "question", "question", "offer_skip"]);
+    expect(seen.map((m) => m.level)).toEqual(["L1", "L2", "L2", "L3", "L4", "L4"]);
+    expect(seen[4].line).toBe(line("c_12", "L4"));
+    expect(seen[5].line).toBe("Want to skip this one?");
+    expect(stateOf(o, "c_12")).toMatchObject({ levelReached: "L4", failedAttempts: 5 });
   });
 
   it("offers to move on after the move cap when L4 is not earned", () => {

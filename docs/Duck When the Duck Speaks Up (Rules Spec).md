@@ -137,6 +137,18 @@ The brakes keep the duck from turning into an interrogation. They override every
 | Session length | At 8 minutes or 6 concepts, the duck proposes wrapping up; it never extends unasked |
 | AI unavailable | Use precomputed questions from the slide analysis; never improvise answers |
 
+**How the code runs the brakes** (added by Dev B in B9; needs Angela's yes). The table above leaves gaps. These are the choices the code makes, covered by `tests/brakes.test.ts`.
+
+- **"Back-to-back questions" means questions with nothing in between.** A content question or a rephrase counts. An acknowledgement ("Got it"), a celebration, an offer to skip, a check-in, an open prompt or a pause ends the run, and a question that follows an acknowledgement or celebration starts a new run. The worked example needs this: its turns 2, 3 and 4 are all questions, but turn 3 opens with "Got it."
+- **The open prompt does not use up a ladder move.** "What's the next piece of it?" stays on the same concept at the same level; the ladder carries on after it. It replaces only a question or rephrase, never an offer to skip.
+- **Two skips: asked once, and the answer is not scored.** If the student then says "wrap up" (or any explicit request to stop) the session wraps; any other short reply, such as "keep going", carries on. If nothing is left to ask, the duck proposes wrapping up instead of asking "Keep going or wrap up?".
+- **The session-length limit counts finished concepts** (Owned, Assisted, Explained to or Skipped) **and active time.** Time spent paused does not count. The duck proposes wrapping up at the next natural break (when it is about to move to a new concept), never in the middle of helping someone. It proposes once; if the student says "keep going" it does not ask again, and it never extends the session by itself.
+- **A proposal is a question; the student decides.** "Yes", "sure", "okay" or "let's wrap up" wraps up. A short "keep going" or "no" carries on and is not scored. A long reply is the student explaining: it is scored as usual and counts as turning the proposal down. When every concept has been asked and the student has already turned the proposal down, the duck closes, because it has nothing left to ask.
+- **The student can always stop.** "Let's wrap up", "I want to stop", or a turn that is just "I'm done" or "stop" ends the session at any point. "I'm done with halving, now I check the middle" is an explanation and does not.
+- **Silence adds the 8 s signal once per student turn** (0.25, to the concept the duck asked about), when the duck last asked a content question. Check-ins, proposals and offers do not count. The rephrase keeps the same level even if the new score is in a higher band, and it does not use up a ladder move. Until Dev A's `wordMove` is wired in, the rephrase repeats the same line. 20 s offers to skip; 45 s pauses. A step that was already handled returns 409, so a late timer can never double-count.
+- **Coming back from a pause.** A short reply with nothing in it ("I'm back", "okay", "sorry") repeats the question and scores nothing. An actual answer is scored as usual, and "skip" still skips.
+- **`silenceBeforeMs` on a turn is ignored.** The silence signal is applied by the `/silence` call, so using it again would count the same pause twice.
+
 **Never**
 
 - Speak while the student is speaking.
@@ -161,6 +173,13 @@ Praise is rare and specific, so it means something. It follows Burrow's rule: ce
 - **Once per concept.** No second celebration for the same concept.
 - **Steer after success.** Wait until the duck's audio ends plus 1.5 s, then move to the next concept. A success is the best moment to move forward.
 - **Wrap-up.** One spoken sentence: the strongest moment and the one concept to revisit. The full results go to the on-screen debrief.
+
+**How the code applies the celebration table** (added by Dev B in B9; needs Angela's yes)
+
+- **"Caught a misconception or bug on their own" means the planted mistake, answered with no help.** A concept can carry a flag, `plants_misconception`, set when its opening question states a wrong claim ("My friend wrote `lo = mid`. Is that okay?"). If the student gets that right at L0 it is a real celebration even though there was no struggle. After any help it is only "Got it". Extraction sets the flag; the demo seed sets it on the update step.
+- **A celebration is its own move, and the next question follows 1.5 s later as a second move.** `/turn` returns the celebration with the follow-up in `then`. Dev A speaks the celebration, waits for the audio to end plus `DUCK.afterCelebrationMs`, then speaks `then.line`. The server has already counted the follow-up as asked.
+- **The line names the concept** ("Ooh, nice. You got when it stops.") until Dev A's `wordMove` writes a specific one ("Ooh, you caught the infinite loop"). A concept name too long to fit in 20 words falls back to "Ooh, nice. You got that one."
+- **After L4, the answer is always neutral,** even if the score had climbed far past 0.45.
 
 ## Outside a session: invitations
 

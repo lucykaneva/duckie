@@ -16,6 +16,8 @@ export interface ExtractedConcept {
   kind: ConceptKind;
   misconceptions: string[];
   checkPrompt: string;
+  /** The check question states a wrong claim for the student to catch. Only for kind "explain". */
+  plantsMisconception: boolean;
   fallbackQuestions: { L1: string; L2: string; L3: string; L4: string };
   /** Server only. Goes to concept_secrets, never to an API response or an AI prompt. */
   secret?: { referenceCode: string; expectedAnswer: string };
@@ -182,6 +184,7 @@ export function validateExtraction(
       kind,
       misconceptions,
       checkPrompt,
+      plantsMisconception: kind === "explain" && c.plantsMisconception === true && misconceptions.length > 0,
       fallbackQuestions: lines,
       ...(secret ? { secret } : {}),
     });
