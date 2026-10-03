@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "db:migrate": "node --experimental-strip-types src/lib/db/migrate.ts",
+    "db:seed": "node --experimental-strip-types --env-file-if-exists=.env --env-file-if-exists=.env.local src/lib/db/seed.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
