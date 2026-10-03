@@ -15,6 +15,7 @@ export type DuckSessionEvent =
   | { type: "student_turn"; turn: StudentTurn & { silenceBeforeMs: number } }
   | { type: "partial"; text: string }
   | { type: "filler" }
+  | { type: "silence_armed"; steps: number[] }
   | { type: "silence_timer"; ms: number }
   | { type: "dropped_reply"; reason: string }
   | { type: "voice"; event: VoiceEvent }
@@ -44,6 +45,7 @@ export class DuckSession {
   private duckFinishedAt: number | null = null;
   private turnSilenceMs: number | null = null;
   private armSilenceOnIdle = false;
+  private awaitingAnswer = false; // the duck asked something and the student has not really answered yet
   private finishAfterIdle = false;
 
   private fillerTimer: ReturnType<typeof setTimeout> | null = null;
@@ -127,6 +129,9 @@ export class DuckSession {
       case "turn":
         void this.onTurn(event.turn);
         break;
+      case "empty_turn":
+        this.onEmptyTurn();
+        break;
       case "duck_idle":
         this.onDuckIdle();
         break;
@@ -148,8 +153,18 @@ export class DuckSession {
     this.setState("listening"); // also resumes from "paused"
   }
 
+  private onEmptyTurn() {
+    // Noise is not an answer: the silence clock keeps running from when the duck stopped.
+    this.turnSilenceMs = null;
+    if (!this.awaitingAnswer || this.isEnded()) return;
+    if (this.state === "listening" && this.duckFinishedAt !== null) {
+      this.startSilenceTimers(Date.now() - this.duckFinishedAt);
+    }
+  }
+
   private async onTurn(turn: StudentTurn) {
     if (!this.sessionId || this.state === "ended") return;
+    this.awaitingAnswer = false;
     const sessionId = this.sessionId;
     const seq = this.turnSeq;
     const silenceBeforeMs = this.turnSilenceMs ?? 0;
@@ -200,7 +215,9 @@ export class DuckSession {
     this.emit({ type: "move", move, source });
     this.duckFinishedAt = null;
     this.armSilenceOnIdle = opts.armSilence && !NO_SILENCE_TIMER.includes(move.kind);
+    if (opts.armSilence) this.awaitingAnswer = this.armSilenceOnIdle;
     if (move.sessionState === "paused" || move.kind === "pause") {
+      this.awaitingAnswer = false;
       this.clearSilenceTimers();
       this.armSilenceOnIdle = false;
       this.voice.speak(move.line);
@@ -214,9 +231,12 @@ export class DuckSession {
 
   // ---- silence timers (8 s rephrase, 20 s offer skip, 45 s pause) ----------
 
-  private startSilenceTimers() {
+  /** `elapsedMs` is quiet time that has already passed since the duck stopped talking. */
+  private startSilenceTimers(elapsedMs = 0) {
     this.clearSilenceTimers();
-    this.silenceTimers = SILENCE_STEPS_MS.map((ms) => setTimeout(() => void this.onSilence(ms), ms));
+    const steps = SILENCE_STEPS_MS.filter((ms) => ms > elapsedMs);
+    this.silenceTimers = steps.map((ms) => setTimeout(() => void this.onSilence(ms), ms - elapsedMs));
+    this.emit({ type: "silence_armed", steps });
   }
 
   private async onSilence(ms: number) {

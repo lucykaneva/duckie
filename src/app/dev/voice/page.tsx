@@ -76,6 +76,9 @@ export default function VoiceSpikePage() {
       case "filler":
         addRow("duck", `(filler) Hmm, let me think.`);
         break;
+      case "silence_armed":
+        addRow("system", `silence timers armed: ${event.steps.map((ms) => ms / 1000 + " s").join(", ") || "none"}`);
+        break;
       case "silence_timer":
         addRow("system", `silence timer fired: ${event.ms / 1000} s, asking /silence`);
         break;
@@ -86,6 +89,8 @@ export default function VoiceSpikePage() {
         addRow("system", `ERROR: ${event.message}`);
         break;
       case "voice":
+        if (event.event.type === "speech_started") addRow("system", "heard speech, silence timers cancelled", event.event.at);
+        if (event.event.type === "empty_turn") addRow("system", "that sound had no words in it, ignoring");
         if (event.event.type === "barge_in") addRow("system", "barge-in: duck audio stopped", event.event.at);
         if (event.event.type === "waiting_unfinished_thought") addRow("system", "ends with a filler word, waiting longer");
         break;

@@ -37,6 +37,8 @@ export type VoiceEvent =
   | { type: "barge_in"; at: string }
   | { type: "auto_response_cancelled" }
   | { type: "waiting_unfinished_thought"; text: string }
+  /** Sound was detected but no words came out of it. */
+  | { type: "empty_turn" }
   /** The duck's audio has finished playing (not just generated). */
   | { type: "duck_idle" }
   | { type: "mic_level"; peak: number; chunksSent: number }
@@ -81,10 +83,7 @@ export class DuckVoice {
         this.emit({ type: "mic_level", peak, chunksSent: this.chunksSent });
       });
       this.player = new PcmPlayer();
-      this.player.onIdle = () => {
-        if (this.status === "speaking") this.setStatus("listening");
-        this.emit({ type: "duck_idle" });
-      };
+      this.player.onIdle = () => this.checkDuckFinished();
 
       const token = await tokenPromise;
       const ws = new WebSocket(REALTIME_URL, [`xai-client-secret.${token}`]);
@@ -216,6 +215,8 @@ export class DuckVoice {
         // Every response must be a line we asked for. Cancel anything Grok starts on its own.
         if (!this.responseIsOurs) {
           this.send({ type: "response.cancel" });
+          // Do not wait for a "done" that may never come for a cancelled reply.
+          this.responseActive = false;
           this.emit({ type: "auto_response_cancelled" });
         }
         break;
@@ -229,11 +230,14 @@ export class DuckVoice {
       }
       case "response.done": {
         this.responseActive = false;
-        if (this.responseIsOurs) {
+        const wasOurs = this.responseIsOurs;
+        if (wasOurs) {
           const line = this.pendingLines.shift();
           if (line) this.emit({ type: "duck_said", text: line });
         }
         this.responseIsOurs = false;
+        // Grok generates faster than real time, so the audio is often still playing here.
+        if (wasOurs) this.checkDuckFinished();
         break;
       }
       case "error": {
@@ -242,6 +246,16 @@ export class DuckVoice {
       }
     }
     this.emit({ type: "server", eventType: event.type, raw: event });
+  }
+
+  /**
+   * The duck has finished only when Grok is done generating the line AND the last audio has played.
+   * Checking just the player is wrong: it also goes quiet in the gaps between streamed pieces.
+   */
+  private checkDuckFinished() {
+    if (this.responseActive || this.player?.playing) return;
+    if (this.status === "speaking") this.setStatus("listening");
+    this.emit({ type: "duck_idle" });
   }
 
   private scheduleFinalize(ms: number) {
@@ -274,7 +288,12 @@ export class DuckVoice {
     this.turnSegments.clear();
     this.speechStartedAt = null;
     this.speechStoppedAt = null;
-    if (!text || !startedAt || !endedAt) return;
+    if (!startedAt || !endedAt) return;
+    if (!text) {
+      // The VAD heard something (noise, an echo) but nothing was said.
+      this.emit({ type: "empty_turn" });
+      return;
+    }
     this.emit({ type: "turn", turn: { text, startedAt, endedAt } });
   }
 
