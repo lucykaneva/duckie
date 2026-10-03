@@ -172,7 +172,7 @@ function taskFor(input: WordMoveInput): string {
   }
   const again =
     input.kind === "rephrase"
-      ? " The student did not answer last time, so say it in different words, at the same level, without making it easier."
+      ? " The student did not answer last time, so say it in different words, at the same level, without making it easier. If they asked what you meant, say what you meant in plain everyday words (never the answer)."
       : "";
   switch (input.level) {
     case "L1":

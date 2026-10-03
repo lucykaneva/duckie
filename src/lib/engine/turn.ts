@@ -16,9 +16,11 @@ import { chooseLevel, higherLevel, stateAfterResolve } from "./ladder";
 import { addSignals, collectSignals, judgeSignals, quoteAppears } from "./score";
 import {
   detectAffirmative,
+  detectClarification,
   detectHelpRequest,
   detectKeepGoing,
   detectMoveOn,
+  detectQuestion,
   detectTextSignals,
   detectWrapUpRequest,
   tokenize,
@@ -27,6 +29,8 @@ import type { SignalKind } from "./signals";
 import {
   ACK_SKIP_LINE,
   ALL_ASKED_PROPOSAL_LINE,
+  ASK_AGAIN_CHECK_IN_LINE,
+  ASK_AGAIN_PROPOSAL_LINE,
   CHECK_IN_LINE,
   LIMIT_PROPOSAL_LINE,
   OFFER_SKIP_LINE,
@@ -327,6 +331,62 @@ export function processTurn(
 
   // 2. An answer to a wrap-up proposal or to "Keep going or wrap up?".
   if (session.pending === "wrap_proposal" && detectAffirmative(text)) return closeOutcome();
+
+  // 2b. The student answered a check-in or proposal with a question ("Is it log three?", "what do you mean?").
+  // A question is neither yes nor no, so the session must not close on it and nothing is scored. The duck
+  // cannot answer it ("I'm just a duck"), so it asks again; if they only did not understand, it repeats itself.
+  if (
+    session.pending !== null &&
+    !detectKeepGoing(text) &&
+    !detectAffirmative(text) &&
+    (detectClarification(text) || detectQuestion(text))
+  ) {
+    const line = detectClarification(text)
+      ? session.lastLine
+      : session.pending === "wrap_proposal"
+        ? ASK_AGAIN_PROPOSAL_LINE
+        : ASK_AGAIN_CHECK_IN_LINE;
+    return {
+      session: { ...carried(), lastMoveKind: "check_in", lastLine: line },
+      move: {
+        kind: "check_in",
+        level: "L0",
+        conceptId: fallbackConceptId,
+        line,
+        sessionState: session.pending === "wrap_proposal" ? "wrapping_up" : "active",
+        concepts: progress(concepts),
+      },
+      signals: [],
+      scoreAfter: focus?.score ?? 0,
+      resolved: [],
+    };
+  }
+
+  // 2c. The student asked what the duck's last question meant. That is not a failed attempt and not a request
+  // for a bigger hint, so the ladder stays where it is: the same question, said again (wordMove words it).
+  if (
+    focus &&
+    session.pending === null &&
+    detectClarification(text) &&
+    session.lastMoveKind !== null &&
+    ["question", "rephrase", "open", "offer_skip"].includes(session.lastMoveKind)
+  ) {
+    const kind: MoveKind = session.lastMoveKind === "question" ? "rephrase" : (session.lastMoveKind as MoveKind);
+    return {
+      session: { ...carried(), lastMoveKind: kind },
+      move: {
+        kind,
+        level: focus.levelReached,
+        conceptId: focus.conceptId,
+        line: session.lastLine,
+        sessionState: "active",
+        concepts: progress(concepts),
+      },
+      signals: [],
+      scoreAfter: focus.score,
+      resolved: [],
+    };
+  }
 
   // 3. Back from a pause with nothing but "I'm back": repeat the question, score nothing.
   if (

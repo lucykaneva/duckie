@@ -2,6 +2,7 @@ import { DUCK } from "../duck/config";
 import type { DuckConfig } from "../duck/config";
 import {
   AFFIRMATIVE_PATTERN,
+  CLARIFY_PATTERNS,
   DONT_KNOW_PATTERNS,
   FILLER_WORD,
   HEDGE_PATTERNS,
@@ -11,6 +12,7 @@ import {
   NOT_FILLER_PAIRS,
   PLANTED_AGREE_PATTERNS,
   PLANTED_REJECT_PATTERNS,
+  QUESTION_START_PATTERN,
   WRAP_UP_PATTERNS,
 } from "./phrases";
 
@@ -105,6 +107,18 @@ export function plantedAgreementQuote(text: string): string | null {
   if (!PLANTED_AGREE_PATTERNS.some((pattern) => pattern.test(t))) return null;
   const trimmed = text.trim();
   return trimmed || null;
+}
+
+/** "What do you mean by pebbles?", "say that again". Asks about the duck's last line; never a struggle signal. */
+export function detectClarification(text: string): boolean {
+  const t = normalize(text);
+  return CLARIFY_PATTERNS.some((pattern) => pattern.test(t));
+}
+
+/** The student asked something. The duck cannot answer it, and it is not an answer to the duck either. */
+export function detectQuestion(text: string): boolean {
+  const t = normalize(text);
+  return t.includes("?") || QUESTION_START_PATTERN.test(t);
 }
 
 /** "Can you explain it?" A request for help, never a struggle signal. */

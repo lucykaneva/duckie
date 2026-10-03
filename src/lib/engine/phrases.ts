@@ -81,6 +81,28 @@ export const HELP_REQUEST_PATTERNS: RegExp[] = [
 ];
 
 /**
+ * "What do you mean by pebbles?", "say that again", "I don't get the question". The student is asking
+ * about the duck's last line, not answering it. Never a struggle signal.
+ */
+export const CLARIFY_PATTERNS: RegExp[] = [
+  /\bwhat (?:do|did) you mean\b/,
+  /\bwhat does (?:that|this|it) mean\b/,
+  /\bwhat (?:are|were) you (?:asking|saying)\b/,
+  /\bwhat was (?:that|the question)\b/,
+  /\b(?:i )?(?:don'?t|do not) (?:understand|get) (?:the|your|that|this) (?:question|part)\b/,
+  /\b(?:can|could) you (?:please )?(?:repeat|say) (?:that|it|the question)(?: again)?\b/,
+  /\b(?:say|repeat) (?:that|it|the question) (?:again|one more time)\b/,
+  /\bcome again\b/,
+  /^(?:sorry|pardon|huh|what)[?.! ]*$/,
+  // "What's a pebble?": a bare question about one or two words.
+  /^(?:and )?what(?:'s| is| are) (?:a |an |the |my )?[a-z']+(?: [a-z']+)?\??$/,
+];
+
+/** A question the duck cannot answer: it has a question mark, or starts like one. */
+export const QUESTION_START_PATTERN =
+  /^(?:is|are|was|were|does|do|did|can|could|would|should|will|what|why|how|which|where|when|who)\b/;
+
+/**
  * Asking to stop the session. Explicit requests only: "let's wrap up", "I want to stop",
  * or a turn that is just "wrap up" / "I'm done". "I'm done with halving" is the student explaining.
  */

@@ -12,8 +12,10 @@ import { processSilence } from "./silence";
 import type { SilenceStep } from "./silence";
 import {
   detectAffirmative,
+  detectClarification,
   detectKeepGoing,
   detectMoveOn,
+  detectQuestion,
   detectWrapUpRequest,
   plantedAgreementQuote,
   tokenize,
@@ -85,6 +87,9 @@ export function needsJudge(run: SessionRun, text: string): boolean {
   const short = tokenize(text).length <= ENGINE.shortTurnMaxWords;
   if (run.pending !== null && (short || detectKeepGoing(text) || detectAffirmative(text))) return false;
   if (run.lastMoveKind === "offer_skip" && detectAffirmative(text)) return false;
+  // "What do you mean?" and a question in reply to a check-in: the engine repeats itself, nothing to judge.
+  if (detectClarification(text)) return false;
+  if (run.pending !== null && detectQuestion(text)) return false;
   if (run.pausedAtMs !== null && short) return false;
   return true;
 }
@@ -142,6 +147,22 @@ function withPlantedAgreement(result: JudgeResult, args: TurnArgs): JudgeResult 
   return { ...result, misconceptions: [...result.misconceptions, { conceptId: def.id, quote }] };
 }
 
+/**
+ * The judge is unavailable. The engine only starts quizzing once something shows the student has begun
+ * teaching, and without Grok nothing would, so the duck would invite forever. A turn longer than a
+ * short reply is taken as "they started explaining" and attached to the first open idea as a vague
+ * item, quoting the student's own opening words. The duck then works through its precomputed questions.
+ */
+function codeOnlyJudge(args: TurnArgs): JudgeResult {
+  const base = emptyJudgeResult();
+  if (!hasNotStartedTeaching(args.run)) return base;
+  const words = args.text.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= ENGINE.shortTurnMaxWords) return base;
+  const first = args.run.concepts.find(isOpen);
+  if (!first) return base;
+  return { ...base, vague: [{ conceptId: first.conceptId, quote: words.slice(0, 4).join(" ") }] };
+}
+
 async function runJudge(
   args: TurnArgs,
   deps: OrchestrateDeps,
@@ -189,7 +210,7 @@ async function runJudge(
   } catch (error) {
     const reason = (error as { reason?: AiFailure } | null)?.reason;
     return {
-      result: withPlantedAgreement(emptyJudgeResult(), args),
+      result: withPlantedAgreement(codeOnlyJudge(args), args),
       judge: reason ?? "error",
       judgeMs: now() - started,
     };

@@ -91,10 +91,7 @@ describe("with the AI switched off", () => {
     console.log(spoken.join("\n"));
   });
 
-  // Needs the engine to treat a long turn as "started teaching" when the judge is unavailable. Today the duck
-  // repeats its opening line forever with the AI off. The fix is a few lines in orchestrate.ts (Dev B's folder);
-  // turn this on once it lands.
-  it.skip("the session still reaches a wrap-up instead of getting stuck", async () => {
+  it("the session still reaches a wrap-up instead of getting stuck", async () => {
     let run: SessionRun = freshSession(defs);
     let now = 0;
     let lastKind = "";

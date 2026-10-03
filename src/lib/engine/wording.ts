@@ -19,6 +19,10 @@ export const PAUSE_LINE = "I'll be here when you're ready.";
 export const ALL_ASKED_PROPOSAL_LINE = "That's everything I wanted to ask. Ready to wrap up?";
 export const LIMIT_PROPOSAL_LINE = "We've covered a lot. Ready to wrap up?";
 export const WRAP_UP_LINE = "Okay, let's wrap up.";
+// The student answered a proposal with a question. A question is neither yes nor no, and a duck cannot grade
+// an answer, so it says so and asks again.
+export const ASK_AGAIN_PROPOSAL_LINE = "Ooh, good question, but I'm just a duck. Ready to wrap up?";
+export const ASK_AGAIN_CHECK_IN_LINE = "Ooh, good question, but I'm just a duck. Keep going or wrap up?";
 
 // Spoken when the leak check blocks a line that would have said a stored answer.
 export const LEAK_FALLBACK_LINE = "Let's slow down. Can you walk me through it step by step?";
