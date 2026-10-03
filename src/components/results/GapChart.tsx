@@ -38,7 +38,6 @@ export function GapChart({ felt, understood }: GapChartProps) {
             <LabelList
               dataKey="value"
               position="insideRight"
-              formatter={(value: number) => String(value)}
               content={(props) => {
                 const { x, y, width, height, value, index } = props;
                 if (x == null || y == null || width == null || height == null) return null;
