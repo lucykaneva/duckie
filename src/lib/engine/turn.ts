@@ -12,7 +12,7 @@ import type {
 } from "../duck/types";
 import { mustOpenUp, nextStreak, sessionLimit, skipCheckInDue } from "./brakes";
 import { feedbackFor } from "./celebration";
-import { chooseLevel, higherLevel, stateAfterResolve } from "./ladder";
+import { chooseLevel, higherLevel, levelForScore, stateAfterResolve } from "./ladder";
 import { addSignals, collectSignals, judgeSignals, quoteAppears } from "./score";
 import {
   detectAffirmative,
@@ -551,8 +551,21 @@ export function processTurn(
   const helpLine = (c: ConceptRun, level: Level): string | undefined =>
     level === "L0" ? undefined : defOf(c)?.fallbackQuestions[level];
 
-  /** A help move at a level, or an offer to move on when the ladder is used up. */
-  const planHelp = (c: ConceptRun, level: Level): PlannedMove => {
+  /**
+   * A help move at a level, or an offer to move on when the ladder is used up.
+   * L4 is exempt from the move cap (spec): a student who is stuck for good, or who asked the duck to explain,
+   * has not been explained to yet, so the duck explains and asks for a teach-back before it ever offers to skip.
+   */
+  const planHelp = (c: ConceptRun, requested: Level, askedForHelp = false): PlannedMove => {
+    const capReached = c.moves >= config.maxMovesPerConcept;
+    const explainFirst =
+      capReached &&
+      c.levelReached !== "L4" &&
+      helpLine(c, "L4") !== undefined &&
+      (askedForHelp ||
+        levelForScore(c.score, config) === "L4" ||
+        c.failedAttempts >= config.failedAttemptsForL4);
+    const level: Level = explainFirst ? "L4" : requested;
     const line = helpLine(c, level);
     const usedUp =
       c.levelReached === "L4" ||
@@ -645,7 +658,7 @@ export function processTurn(
       planned = planNext();
       movingOn = true;
     } else {
-      planned = planHelp(focus, level);
+      planned = planHelp(focus, level, helpRequested);
     }
   } else {
     planned = planNext();

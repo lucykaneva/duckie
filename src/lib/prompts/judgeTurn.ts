@@ -42,6 +42,7 @@ Rules:
 - A quote belongs to the one concept it is about. Do not reuse a quote for several concepts unless it really is about each.
 - When unsure, use null. A few certain items are better than many guesses.
 - Use only the conceptId values you are given.
+- "I'm not sure", "I don't know", "no idea" or a question is NEVER a misconception and is not agreement. Use null.
 - If you are told the duck just asked a planted wrong claim and the student agrees ("that's fine", "yes", "that should work") without correcting it, that is a misconception for that concept. Quote the student's words. A correction ("no, that loops") is covered, not a misconception.
 
 Example (a different topic). Concepts: c_1 "Sunlight", c_2 "Chlorophyll" (known misconception: "plants eat soil"), c_3 "Stomata".
@@ -54,6 +55,23 @@ Answer: {"concepts": [
 
 function emptyResult(): JudgeResult {
   return { covered: [], missed: [], misconceptions: [], contradictions: [], vague: [] };
+}
+
+/** Words that only express uncertainty. A quote made of nothing else says nothing wrong about the topic. */
+const UNCERTAINTY_WORDS = new Set(
+  "i im i'm am have not no sure idea clue dont don't do know dunno um uh hmm maybe think guess kind of a bit really so well honestly actually just still".split(
+    " ",
+  ),
+);
+
+/** "I am not sure", "no idea", "hmm I don't know": not a belief, so never a misconception. */
+export function isOnlyUncertainty(quote: string): boolean {
+  const words = quote
+    .toLowerCase()
+    .replace(/[\u2018\u2019]/g, "'")
+    .split(/[^a-z']+/)
+    .filter(Boolean);
+  return words.every((w) => UNCERTAINTY_WORDS.has(w));
 }
 
 /**
@@ -83,7 +101,7 @@ export function cleanJudgeResult(raw: unknown, input: JudgeInput): JudgeResult {
     if (covered) result.covered.push({ conceptId, quote: covered });
 
     const misconception = findQuote(input.text, item.misconception);
-    if (misconception) result.misconceptions.push({ conceptId, quote: misconception });
+    if (misconception && !isOnlyUncertainty(misconception)) result.misconceptions.push({ conceptId, quote: misconception });
 
     const vague = findQuote(input.text, item.vague);
     if (vague) result.vague.push({ conceptId, quote: vague });

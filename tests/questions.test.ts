@@ -212,3 +212,42 @@ describe("a question means the student needs help", () => {
     expect(out.move.line).toMatch(/guess/);
   });
 });
+
+// The real session where the duck said "Want to skip this one?" twice, even though the student asked it to explain.
+describe("the move cap does not stop the duck from explaining", () => {
+  function stuck(): SessionRun {
+    const run = freshSession(defs);
+    const c = run.concepts.find((x) => x.conceptId === "c_15")!;
+    Object.assign(c, { levelReached: "L2", moves: 5, failedAttempts: 4, score: 1, state: "misconception" });
+    return { ...run, turnCount: 6, focusConceptId: "c_15", lastMoveKind: "question", lastLine: "Why do you think that?" };
+  }
+  const L4_LINE = defs.find((d) => d.id === "c_15")!.fallbackQuestions.L4;
+
+  it("explains (L4) when the student asks 'Can you explain it?' after the cap", () => {
+    const out = turn(stuck(), "Can you explain it?");
+    expect(out.move.kind).not.toBe("offer_skip");
+    expect(out.move.level).toBe("L4");
+    expect(out.move.line).toBe(L4_LINE);
+    expect(out.session.concepts.find((c) => c.conceptId === "c_15")!.levelReached).toBe("L4");
+  });
+
+  it("explains when the student is stuck for good ('I have no idea') instead of offering to skip", () => {
+    const out = turn(stuck(), "I have no idea.");
+    expect(out.move.level).toBe("L4");
+    expect(out.move.kind).not.toBe("offer_skip");
+  });
+
+  it("offers to skip only after the explanation has been given", () => {
+    const explained = turn(stuck(), "Can you explain it?");
+    const out = turn(explained.session, "I still have no idea.");
+    expect(out.move.kind).toBe("offer_skip");
+  });
+
+  it("still offers to skip at the cap when the student is not asking for help and is not stuck", () => {
+    const run = stuck();
+    const c = run.concepts.find((x) => x.conceptId === "c_15")!;
+    Object.assign(c, { score: 0.5, failedAttempts: 1, levelReached: "L2" });
+    const out = turn(run, "Hmm.");
+    expect(out.move.level).not.toBe("L4");
+  });
+});
