@@ -124,7 +124,7 @@ describe("with the AI switched off", () => {
     );
     run = first.outcome.session;
     const rephrase = await orchestrateSilence(
-      { defs, run, answers, step: "rephrase", nowMs: 20_000 },
+      { defs, run, answers, step: 1, nowMs: 20_000 },
       realDeps,
     );
     // null means there was nothing to say (a 409 in the API); otherwise it must be speakable.

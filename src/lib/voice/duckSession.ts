@@ -1,6 +1,6 @@
 // Browser-only. The whole duck loop in one place: this is what the session page (and /dev/voice) uses.
 // Code on the server decides every move; this class only listens, sends turns, and speaks the line back.
-import { DUCK } from "@/lib/duck/config";
+import { DUCK, VOICE } from "@/lib/duck/config";
 import type { SessionStart } from "@/lib/duck/types";
 import { DuckVoice, type StudentTurn, type VoiceEvent } from "./session";
 import { httpTransport, type DuckTransport, type SpokenMove } from "./transport";
@@ -11,15 +11,20 @@ export type DuckState = "idle" | "listening" | "thinking" | "speaking" | "paused
 export type DuckSessionEvent =
   | { type: "state"; state: DuckState }
   | { type: "started"; start: SessionStart }
-  | { type: "move"; move: SpokenMove; source: "opening" | "turn" | "silence" | "end" }
+  | { type: "move"; move: SpokenMove; source: MoveSource }
   | { type: "student_turn"; turn: StudentTurn & { silenceBeforeMs: number } }
   | { type: "partial"; text: string }
   | { type: "filler" }
   | { type: "silence_armed"; steps: number[] }
   | { type: "silence_timer"; ms: number }
   | { type: "dropped_reply"; reason: string }
+  /** A server call failed but the session carries on. `spoke` is true when the duck said something about it. */
+  | { type: "recovering"; message: string; failures: number; spoke: boolean }
   | { type: "voice"; event: VoiceEvent }
   | { type: "error"; message: string };
+
+/** recovery: a line the duck says itself (not from the server) because a /turn call failed. */
+export type MoveSource = "opening" | "turn" | "silence" | "end" | "recovery";
 
 export interface DuckSessionOptions {
   sectionId: string;
@@ -30,6 +35,10 @@ export interface DuckSessionOptions {
 }
 
 export const FILLER_LINE = "Hmm, let me think.";
+/** Said when a /turn call fails. Under 20 words, one question, and it contains no answer. */
+export const RETRY_LINE = "Sorry, I lost that. Can you say it again?";
+/** Said once the server has failed several turns in a row. */
+export const GIVE_UP_LINE = "I can't reach my brain right now. Let's stop here.";
 const SILENCE_STEPS_MS = [DUCK.silenceRephraseMs, DUCK.silenceOfferSkipMs, DUCK.silencePauseMs];
 const IDLE_WAIT_TIMEOUT_MS = 6_000;
 // Moves after which the duck is not waiting for an answer, so no silence timers.
@@ -49,6 +58,7 @@ export class DuckSession {
   private armSilenceOnIdle = false;
   private awaitingAnswer = false; // the duck asked something and the student has not really answered yet
   private finishAfterIdle = false;
+  private failedTurns = 0; // /turn calls that failed in a row; any success resets it
 
   private fillerTimer: ReturnType<typeof setTimeout> | null = null;
   private silenceTimers: ReturnType<typeof setTimeout>[] = [];
@@ -204,10 +214,11 @@ export class DuckSession {
       move = await this.transport.sendTurn(sessionId, { ...turn, silenceBeforeMs });
     } catch (error) {
       this.clearFiller();
-      this.emit({ type: "error", message: errorMessage(error) });
-      this.setState("listening");
+      if (fillerSpoken) await this.waitForIdle();
+      await this.recoverFromFailedTurn(error, seq, sessionId);
       return;
     }
+    this.failedTurns = 0;
     this.clearFiller();
 
     if (fillerSpoken) await this.waitForIdle();
@@ -229,9 +240,46 @@ export class DuckSession {
     }
   }
 
+  /**
+   * /turn failed or timed out. The duck must never go quiet: it says it lost that and listens again
+   * (the silence timers re-arm as after any question). After several failures in a row it says so,
+   * tries to close the session on the server, and stops.
+   */
+  private async recoverFromFailedTurn(error: unknown, seq: number, sessionId: string) {
+    this.failedTurns++;
+    const message = errorMessage(error);
+    // The student already started talking again: their new words win, nothing to apologise for.
+    if (seq !== this.turnSeq || this.isEnded()) {
+      this.emit({ type: "recovering", message, failures: this.failedTurns, spoke: false });
+      return;
+    }
+
+    if (this.failedTurns >= VOICE.maxFailedTurnsInARow) {
+      this.emit({ type: "recovering", message, failures: this.failedTurns, spoke: true });
+      this.emit({ type: "error", message: `The server failed ${this.failedTurns} turns in a row: ${message}` });
+      void this.transport.endSession(sessionId, "server_unreachable").catch(() => {});
+      this.finishAfterIdle = true;
+      this.clearSilenceTimers();
+      this.awaitingAnswer = false;
+      this.armSilenceOnIdle = false;
+      this.emit({ type: "move", move: this.ownMove("wrap_up", GIVE_UP_LINE), source: "recovery" });
+      this.setState("speaking");
+      this.voice.speak(GIVE_UP_LINE);
+      return;
+    }
+
+    this.emit({ type: "recovering", message, failures: this.failedTurns, spoke: true });
+    this.deliver(this.ownMove("rephrase", RETRY_LINE), "recovery", { armSilence: true });
+  }
+
+  /** A move the browser makes by itself. It carries no concept, since the server did not choose it. */
+  private ownMove(kind: SpokenMove["kind"], line: string): SpokenMove {
+    return { kind, level: "L0", conceptId: "", line, sessionState: "active", concepts: [] };
+  }
+
   // ---- speaking a move ----------------------------------------------------
 
-  private deliver(move: SpokenMove, source: "opening" | "turn" | "silence" | "end", opts: { armSilence: boolean }) {
+  private deliver(move: SpokenMove, source: MoveSource, opts: { armSilence: boolean }) {
     this.emit({ type: "move", move, source });
     this.duckFinishedAt = null;
     const followUp = move.then;
@@ -258,7 +306,7 @@ export class DuckSession {
   }
 
   /** celebrate: speak the line, wait for the audio to end plus afterCelebrationMs, then the next line. */
-  private async speakFollowUp(move: SpokenMove, source: "opening" | "turn" | "silence" | "end") {
+  private async speakFollowUp(move: SpokenMove, source: MoveSource) {
     const seq = this.turnSeq;
     await this.waitForIdle();
     await sleep(DUCK.afterCelebrationMs);
@@ -294,7 +342,8 @@ export class DuckSession {
       // Later timers are already running from the original pause, so do not restart them.
       this.deliver(move, "silence", { armSilence: false });
     } catch (error) {
-      this.emit({ type: "error", message: errorMessage(error) });
+      // A missed silence prompt is not worth interrupting the student for; the next timer tries again.
+      this.emit({ type: "recovering", message: errorMessage(error), failures: this.failedTurns, spoke: false });
     }
   }
 
