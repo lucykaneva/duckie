@@ -97,4 +97,17 @@ export const PROMPTS = {
   judgeMaxTokens: 700,
   /** A judge quote with fewer words than this is dropped: one word is too easy to match by accident. */
   minQuoteWords: 2,
+
+  /** wordMove: one fast call per attempt, with a hard cap on the total so the duck is never left waiting. */
+  wordModel: "grok-4.20-non-reasoning",
+  wordAttemptTimeoutMs: 2_500,
+  wordTotalBudgetMs: 3_500,
+  /** No point in a retry that has less than this long to finish. */
+  wordMinRetryMs: 800,
+  wordMaxTokens: 80,
+  /** Some variety so the duck does not repeat itself, but not so much that it drifts off the task. */
+  wordTemperature: 0.6,
+  /** The student's words and the tone hint are cut to this many characters before they reach a prompt. */
+  wordStudentCharsMax: 400,
+  wordToneHintCharsMax: 160,
 };
