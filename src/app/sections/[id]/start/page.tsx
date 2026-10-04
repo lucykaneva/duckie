@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getConcepts } from "@/lib/api";
+import { getConcepts, isSample } from "@/lib/api";
 import { createDuckSession } from "@/lib/duck-runtime";
 import type { Concept } from "@/lib/duck/types";
 import { Button } from "@/components/ui/Button";
@@ -20,6 +20,7 @@ export default function SessionStartPage() {
 
   const [concepts, setConcepts] = useState<Concept[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [sample, setSample] = useState(false);
   const [reload, setReload] = useState(0);
   const [topic, setTopic] = useState("");
   const [confidence, setConfidence] = useState<number | null>(null);
@@ -34,6 +35,7 @@ export default function SessionStartPage() {
     getConcepts(sectionId)
       .then((list) => {
         if (cancelled) return;
+        setSample(isSample(list));
         setConcepts(list);
         setTopic(list[0]?.topic ?? "");
         setStatus("ready");
@@ -74,6 +76,11 @@ export default function SessionStartPage() {
 
   return (
     <main className="mx-auto w-full max-w-content px-5 py-14">
+      {sample ? (
+        <span className="mb-4 inline-flex rounded-full border border-border px-2.5 py-0.5 text-small text-ink-muted">
+          Sample data
+        </span>
+      ) : null}
       <SectionBreadcrumb sectionId={sectionId} />
 
       <header className="mt-6">
@@ -111,7 +118,7 @@ export default function SessionStartPage() {
                     role="radio"
                     aria-checked={selected}
                     onClick={() => setTopic(item.name)}
-                    className={`rounded-card border px-8 py-8 text-left transition-colors ${
+                    className={`card-lift rounded-card border px-8 py-8 text-left transition-colors ${
                       selected
                         ? "border-ink bg-brand-soft"
                         : "border-border bg-surface hover:border-border-strong"

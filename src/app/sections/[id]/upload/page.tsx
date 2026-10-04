@@ -9,7 +9,8 @@ import {
   type KeyboardEvent,
 } from "react";
 import { useParams } from "next/navigation";
-import { getUploadStatus, isTooManyPagesError, uploadFiles, type UploadStatus } from "@/lib/api";
+import { getUploadStatus, isTooManyPagesError } from "@/lib/api";
+import { uploadToSection } from "@/lib/extract/client";
 import type { Concept, ConceptKind } from "@/lib/duck/types";
 import {
   IMAGE_MAX_BYTES,
@@ -26,9 +27,7 @@ import { SectionBreadcrumb } from "@/components/section/SectionBreadcrumb";
 
 const ACCEPTED = [".pdf", ".jpg", ".jpeg", ".png"];
 const TOO_MANY_PAGES = `Too many pages for duckie. Up to ${PDF_MAX_PAGES} pages.`;
-const POLL_MS = 1_500;
 const LINE_MS = 2_500;
-const GIVE_UP_MS = 90_000;
 
 const FINDING_LINES = [
   "duckie find big ideas…",
@@ -73,13 +72,6 @@ type ReadingStatus = {
   pending: number[];
 };
 
-function readingFrom(status: UploadStatus): ReadingStatus {
-  return {
-    pageCount: status.pageCount,
-    pending: status.imagePagesPending ?? [],
-  };
-}
-
 export default function SectionUploadPage() {
   const params = useParams<{ id: string }>();
   const sectionId = Array.isArray(params.id) ? params.id[0] : params.id;
@@ -91,6 +83,7 @@ export default function SectionUploadPage() {
   const [concepts, setConcepts] = useState<Concept[]>([]);
   const [lineIndex, setLineIndex] = useState(0);
   const [reading, setReading] = useState<ReadingStatus | null>(null);
+  const [errorMessage, setErrorMessage] = useState("");
   const [existingName, setExistingName] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -113,41 +106,12 @@ export default function SectionUploadPage() {
   }, [sectionId]);
 
   useEffect(() => {
-    if (phase !== "reading" || !sectionId) return;
-    let cancelled = false;
-    const startedAt = Date.now();
-
-    const poll = setInterval(async () => {
-      if (Date.now() - startedAt > GIVE_UP_MS) {
-        if (!cancelled) setPhase("error");
-        return;
-      }
-      try {
-        const result = await getUploadStatus(sectionId);
-        if (cancelled) return;
-        if (!result) return;
-        setReading(readingFrom(result));
-        if (result.status === "ready") {
-          setConcepts(result.concepts ?? []);
-          setPhase("ready");
-        } else if (result.status === "error") {
-          setPhase("error");
-        }
-      } catch {
-        if (!cancelled) setPhase("error");
-      }
-    }, POLL_MS);
-
+    if (phase !== "reading") return;
     const rotate = setInterval(() => {
       setLineIndex((index) => (index + 1) % FINDING_LINES.length);
     }, LINE_MS);
-
-    return () => {
-      cancelled = true;
-      clearInterval(poll);
-      clearInterval(rotate);
-    };
-  }, [phase, sectionId]);
+    return () => clearInterval(rotate);
+  }, [phase]);
 
   function addFiles(incoming: File[]) {
     const problems: string[] = [];
@@ -187,30 +151,39 @@ export default function SectionUploadPage() {
   async function onUpload() {
     if (!sectionId || files.length === 0) return;
     setFileErrors([]);
+    setErrorMessage("");
     setPhase("uploading");
     try {
-      const result = await uploadFiles(sectionId, files);
-      setReading(readingFrom(result));
-      if (result.status === "ready") {
-        setConcepts(result.concepts ?? []);
-        setPhase("ready");
-        return;
-      }
-      if (result.status === "error") {
-        if (isTooManyPagesError(new Error(result.error ?? ""))) {
-          returnToIdleWithPageLimit();
-          return;
-        }
-        setPhase("error");
-        return;
-      }
-      setLineIndex(0);
-      setPhase("reading");
+      const result = await uploadToSection(sectionId, files[0], {
+        onProgress: (progress) => {
+          if (progress.phase === "uploading") {
+            setPhase("uploading");
+            return;
+          }
+          setLineIndex(0);
+          setPhase("reading");
+          if (progress.phase === "reading_pages") {
+            const next = progress.pagesDone + 1;
+            setReading({
+              pageCount: progress.pagesTotal,
+              pending: next <= progress.pagesTotal ? [next] : [],
+            });
+            return;
+          }
+          setReading({
+            pageCount: progress.pagesTotal || undefined,
+            pending: [],
+          });
+        },
+      });
+      setConcepts(result.concepts ?? []);
+      setPhase("ready");
     } catch (error) {
       if (isTooManyPagesError(error)) {
         returnToIdleWithPageLimit();
         return;
       }
+      setErrorMessage(error instanceof Error ? error.message : "Read not work. Try different file.");
       setPhase("error");
     }
   }
@@ -230,6 +203,7 @@ export default function SectionUploadPage() {
     setConcepts([]);
     setLineIndex(0);
     setReading(null);
+    setErrorMessage("");
     setPhase("idle");
   }
 
@@ -397,7 +371,7 @@ export default function SectionUploadPage() {
 
         {phase === "error" ? (
           <ErrorState
-            message="Read not work. Try different file."
+            message={errorMessage || "Read not work. Try different file."}
             action={<Button onClick={reset}>Try again</Button>}
           />
         ) : null}

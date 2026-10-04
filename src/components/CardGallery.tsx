@@ -7,7 +7,7 @@ export const editorialColumns =
   "pl-5 sm:pl-8 md:grid-cols-[220px_minmax(0,1fr)] md:gap-x-8 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-x-10";
 
 /**
- * The You-page horizontal gallery: warm-gray tray, drag, wheel, snap, and progress line.
+ * The You-page horizontal gallery: recessed sage tray, drag, wheel, snap, and progress line.
  * Pass the cards as children. Report cards and review cards both sit in this tray.
  */
 export function CardGallery({
@@ -97,16 +97,16 @@ export function CardGallery({
   }
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-[22px] bg-[#c2c0b8] py-5 pl-5">
+    <div className="mr-5 min-w-0 overflow-hidden rounded-[22px] bg-[#cdd6be] px-5 py-5 sm:mr-8">
       {label ? (
-        <div className="mb-4 flex items-baseline justify-between gap-4 pr-5 sm:pr-8">
+        <div className="mb-4 flex items-baseline justify-between gap-4">
           <h2 className="text-label">{label}</h2>
           {meta ? <p className="text-small text-ink">{meta}</p> : null}
         </div>
       ) : null}
       <div
         ref={scrollerRef}
-        className={`report-gallery flex cursor-grab snap-x snap-mandatory gap-4 overflow-x-auto bg-transparent py-3 pr-5 active:cursor-grabbing sm:pr-8 ${
+        className={`report-gallery flex cursor-grab snap-x snap-mandatory gap-4 overflow-x-auto bg-transparent py-3 ${
           label ? "-mb-3" : "-my-3"
         }`}
         aria-label={ariaLabel}
@@ -123,7 +123,7 @@ export function CardGallery({
         />
       </div>
       {progress.canScroll ? (
-        <div className="mr-5 mt-3 h-px bg-ink/15 sm:mr-8" aria-hidden="true">
+        <div className="mt-3 h-px bg-ink/15" aria-hidden="true">
           <div
             className="h-[2px] -translate-y-px rounded-full bg-ink/25"
             style={{ width: `${progress.thumb}%`, marginLeft: `${progress.offset}%` }}

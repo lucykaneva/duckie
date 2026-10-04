@@ -1,7 +1,7 @@
 import { Primitives } from './Primitives';
 
 const colours = [
-  { name: 'bg', hex: '#E4E3DF', fill: 'bg-bg' },
+  { name: 'bg', hex: '#EEF1E8', fill: 'bg-bg' },
   { name: 'surface', hex: '#FFFFFF', fill: 'bg-surface' },
   { name: 'ink', hex: '#1D1D1F', fill: 'bg-ink' },
   { name: 'ink-muted', hex: '#5C5B57', fill: 'bg-ink-muted' },

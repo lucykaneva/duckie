@@ -12,7 +12,26 @@ import type {
   UploadJob,
 } from "@/lib/duck/types";
 import { MOCK_PROFILE } from "@/lib/mock/profile";
+import { MOCK_RESULTS } from "@/lib/mock/results";
 import { MOCK_REVIEW_DUE } from "@/lib/mock/review";
+
+/** True when a response was filled from src/lib/mock because the live route failed. */
+export function isSample(value: unknown): boolean {
+  return Boolean(value && typeof value === "object" && (value as { sample?: boolean }).sample);
+}
+
+function markSample<T extends object>(value: T): T {
+  Object.defineProperty(value, "sample", { value: true, enumerable: false });
+  return value;
+}
+
+/** Sample data is allowed for ?mock=1 and while running `next dev`. Production shows the error. */
+function sampleAllowed(): boolean {
+  if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("mock") === "1") {
+    return true;
+  }
+  return process.env.NODE_ENV === "development";
+}
 
 export type DuckLearnedItem = {
   line: string;
@@ -111,7 +130,9 @@ async function errorFor(response: Response, action: string): Promise<ApiError> {
 }
 
 export function isTooManyPagesError(error: unknown): boolean {
-  if (error instanceof ApiError && error.code === "too_many_pages") return true;
+  if (error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "too_many_pages") {
+    return true;
+  }
   const message = error instanceof Error ? error.message.toLowerCase() : "";
   return (
     message.includes("too_many_pages") ||
@@ -143,14 +164,12 @@ export async function getSections(courseId: string): Promise<Section[]> {
     throw new Error("Couldn't load sections. The server didn't respond.");
   }
 
-  // TODO: remove this fallback once GET /api/courses/:id/sections exists.
-  // The route only implements POST today, so Next answers 405. Treat that,
-  // and a real 404, as "not built yet".
-  if (response.status === 404 || response.status === 405) {
-    return [
+  // GET is not implemented (405). Sample chapters only in dev or ?mock=1.
+  if ((response.status === 404 || response.status === 405) && sampleAllowed()) {
+    return markSample([
       { id: "sec_midterm", courseId, name: "Midterm", type: "test" },
       { id: "sec_final", courseId, name: "Final project", type: "project" },
-    ];
+    ]);
   }
 
   if (!response.ok) {
@@ -261,13 +280,11 @@ export async function getConcepts(sectionId: string): Promise<Concept[]> {
       throw new Error("Couldn't load concepts. The response wasn't a list.");
     }
     return concepts;
-  } catch {
-    // Fall through to the stub list.
+  } catch (error) {
+    if (!sampleAllowed()) throw error;
   }
 
-  // TODO: remove this fallback once GET /api/sections/:id/concepts can
-  // return concepts without a live database.
-  return FALLBACK_CONCEPTS.map((concept) => ({ ...concept }));
+  return markSample(FALLBACK_CONCEPTS.map((concept) => ({ ...concept })));
 }
 
 export async function startSession(
@@ -280,10 +297,9 @@ export async function startSession(
       method: "POST",
       body: JSON.stringify({ sectionId, topic, confidence }),
     });
-  } catch {
-    // TODO: remove this fallback once POST /api/sessions works without a live
-    // database. The session screen only needs a sessionId to open.
-    return {
+  } catch (error) {
+    if (!sampleAllowed()) throw error;
+    return markSample({
       sessionId: "s_demo",
       topic,
       confidence,
@@ -295,7 +311,7 @@ export async function startSession(
         sessionState: "active",
         concepts: [{ id: "c_12", state: "not_yet", score: 0 }],
       },
-    };
+    });
   }
 }
 
@@ -308,10 +324,15 @@ export async function endSession(sessionId: string, reason: string): Promise<Duc
 }
 
 export async function getResults(sessionId: string): Promise<SessionResults> {
-  return request<SessionResults>(
-    `/api/sessions/${encodeURIComponent(sessionId)}/results`,
-    "load the results",
-  );
+  try {
+    return await request<SessionResults>(
+      `/api/sessions/${encodeURIComponent(sessionId)}/results`,
+      "load the results",
+    );
+  } catch (error) {
+    if (!sampleAllowed()) throw error;
+    return markSample({ ...MOCK_RESULTS, sessionId });
+  }
 }
 
 export async function getSessionLog(sessionId: string): Promise<SessionLog> {
@@ -321,18 +342,16 @@ export async function getSessionLog(sessionId: string): Promise<SessionLog> {
   );
 }
 
-export async function getReviewDue(options?: { mock?: boolean }): Promise<DueRecall[]> {
-  if (options?.mock) return MOCK_REVIEW_DUE.map((item) => ({ ...item }));
-
+export async function getReviewDue(): Promise<DueRecall[]> {
   try {
     const list = await request<DueRecall[]>("/api/review/due", "load review");
     if (!Array.isArray(list)) {
       throw new Error("Couldn't load review. The response wasn't a list.");
     }
     return list;
-  } catch {
-    // TODO: remove this fallback once GET /api/review/due is reliable.
-    return MOCK_REVIEW_DUE.map((item) => ({ ...item }));
+  } catch (error) {
+    if (!sampleAllowed()) throw error;
+    return markSample(MOCK_REVIEW_DUE.map((item) => ({ ...item })));
   }
 }
 
@@ -345,32 +364,39 @@ function cloneProfile(profile: Profile): Profile {
   };
 }
 
-export async function getProfile(options?: { mock?: boolean }): Promise<Profile> {
-  const path = options?.mock ? "/api/profile?mock=1" : "/api/profile";
+export async function getProfile(): Promise<Profile> {
   try {
-    const data = await request<Profile>(path, "load the profile");
-    if (data.insights && data.insights.length > 0) return data;
-  } catch {
-    // The live stub does not yet return insights.
+    const data = await request<Profile>("/api/profile", "load the profile");
+    return { ...data, insights: data.insights ?? [] };
+  } catch (error) {
+    if (!sampleAllowed()) throw error;
+    return markSample(cloneProfile(MOCK_PROFILE));
   }
+}
 
-  // TODO: remove this fixture once GET /api/profile?mock=1 returns sessionCount and insights.
-  return cloneProfile(MOCK_PROFILE);
+async function postProfile(path: string, body?: unknown): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method: "POST",
+      headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (error) {
+    if (!sampleAllowed()) throw error;
+    return;
+  }
+  if (!response.ok && !sampleAllowed()) {
+    throw await errorFor(response, "update the profile");
+  }
 }
 
 export async function dismissProfileItem(itemId: string): Promise<void> {
-  // TODO(Dev B): add POST /api/profile/dismiss { itemId }. Stubbed as 200.
-  void fetch("/api/profile/dismiss", {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({ itemId }),
-  }).catch(() => {});
+  // POST /api/profile/dismiss is not built yet.
+  await postProfile("/api/profile/dismiss", { itemId });
 }
 
 export async function resetProfile(): Promise<void> {
-  // TODO(Dev B): add POST /api/profile/reset. Stubbed as 200.
-  void fetch("/api/profile/reset", {
-    method: "POST",
-    headers: { Accept: "application/json" },
-  }).catch(() => {});
+  // POST /api/profile/reset is not built yet.
+  await postProfile("/api/profile/reset");
 }

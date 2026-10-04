@@ -14,7 +14,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { dismissProfileItem, getProfile, resetProfile } from "@/lib/api";
+import { dismissProfileItem, getProfile, isSample, resetProfile } from "@/lib/api";
 import type { DuckInsight, Profile } from "@/lib/duck/types";
 import { editorialColumns } from "@/components/CardGallery";
 import { DuckInsights } from "@/components/DuckInsights";
@@ -27,6 +27,7 @@ import { Spinner } from "@/components/ui/Spinner";
 export default function DuckiePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [sample, setSample] = useState(false);
   const [reload, setReload] = useState(0);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [leavingId, setLeavingId] = useState<string | null>(null);
@@ -40,9 +41,10 @@ export default function DuckiePage() {
     let cancelled = false;
     const empty = new URLSearchParams(window.location.search).get("empty") === "1";
     setStatus("loading");
-    getProfile({ mock: true })
+    getProfile()
       .then((data) => {
         if (cancelled) return;
+        setSample(isSample(data));
         setProfile(empty ? { ...data, insights: [] } : data);
         setDismissed(new Set());
         setStatus("ready");
@@ -113,6 +115,13 @@ export default function DuckiePage() {
 
   return (
     <main className="flex flex-col">
+      {sample ? (
+        <div className={`pt-4 ${editorialColumns}`}>
+          <span className="inline-flex rounded-full border border-border px-2.5 py-0.5 text-small text-ink-muted">
+            Sample data
+          </span>
+        </div>
+      ) : null}
       <div className={`grid h-[max(7rem,calc(33.333svh-4rem))] shrink-0 items-center ${editorialColumns}`}>
         <div className="hidden md:block" aria-hidden="true" />
         <h1 className="text-title">a little more about how you teach</h1>

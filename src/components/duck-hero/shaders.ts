@@ -59,18 +59,18 @@ uniform vec2 uCenter;       // duck center, CSS px from canvas center
 uniform float uSpread;      // scatter radius, CSS px
 uniform float uSize;        // scale on aSize (aSize is CSS px)
 uniform float uPixelRatio;
-uniform float uDrift;       // coherent drift amplitude, CSS px
-uniform float uMicro;       // per-particle micro-motion amplitude, CSS px
-uniform float uExcursion;   // 0 disables edge excursions (reduced motion)
+uniform float uDrift;       // 1 enables idle motion, 0 holds every particle at home
+uniform float uExcursion;   // 0 disables the rare edge wander (reduced motion)
 
 attribute vec2 aTarget;     // normalized position in the image
 attribute vec3 aColor;      // palette color
 attribute vec2 aScatter;    // normalized start position
-attribute vec4 aRandom;     // x: intro delay, y: micro-motion phase, z: disperse distance (px), w: angle
+attribute vec4 aRandom;     // x: intro delay, y: phase, z: disperse distance (px), w: angle
 attribute float aSize;      // diameter in CSS px
 attribute float aAlpha;
-attribute vec2 aNormal;     // outward normal for edge particles, zero inside
+attribute vec2 aNormal;     // outward normal
 attribute vec3 aExcursion;  // x: distance px (0 = never), y: period s, z: phase
+attribute float aDepth;     // signed distance, sample px; positive is inside
 attribute vec2 aOffset;     // cursor spring offset from the CPU, CSS px
 
 varying vec3 vColor;
@@ -82,28 +82,35 @@ void main() {
   vec2 target = aTarget * uScale + uCenter;
   vec2 start = aScatter * uSpread + uCenter;
 
+  vec2 home = target;
+
   // Staggered assembly: each particle leaves on its own delay and eases in.
   float t = clamp((uAssemble - aRandom.x * 0.45) / 0.55, 0.0, 1.0);
   float e = 1.0 - pow(1.0 - t, 3.0);
-  vec2 pos = mix(start, target, e);
+  vec2 pos = mix(start, home, e);
   vec2 path = target - start;
   pos += vec2(-path.y, path.x) * (aRandom.w - 0.5) * 0.6 * e * (1.0 - e);
 
-  // Idle: low-frequency noise so neighbours drift together, not static.
-  float mass = mix(1.15, 0.55, smoothstep(1.5, 8.0, aSize));
-  vec3 np = vec3(aTarget * 1.3, uTime * 0.045);
-  vec2 idle = vec2(snoise(np), snoise(np + 31.7)) * uDrift * mass;
-  float ph = aRandom.y * 6.2831853;
-  idle += vec2(sin(uTime * 0.9 + ph), cos(uTime * 0.67 + ph * 1.7)) * uMicro * mass;
-  // Occasional edge particles wander out along their normal, then ease back.
-  if (aExcursion.x > 0.0) {
-    float cyc = fract(uTime / aExcursion.y + aExcursion.z);
-    float bump = sin(3.14159265 * clamp(cyc / 0.45, 0.0, 1.0));
-    bump *= bump;
-    vec2 tangent = vec2(-aNormal.y, aNormal.x);
-    idle += (aNormal + tangent * snoise(np + 3.0) * 0.5) * aExcursion.x * bump * uExcursion;
+  // Local offsets only. A duck-wide sway would slide the whole shape.
+  float edge = smoothstep(14.0, 1.5, aDepth);
+  float heavy = smoothstep(3.2, 8.0, aSize);
+  float amp = mix(10.0, 5.76, edge) * mix(1.05, 0.6, heavy);
+  float rate = mix(0.7, 0.36, heavy);
+  float phase = aRandom.y * 6.2831853;
+  vec3 local = vec3(aTarget * 9.0, uTime * rate * 0.7 + phase * 0.15);
+  vec3 fine = vec3(aTarget * 18.0, uTime * rate + phase * 0.35);
+  vec2 flow = vec2(snoise(local), snoise(local + vec3(4.2, 8.7, 1.3))) * 0.45
+            + vec2(snoise(fine), snoise(fine + vec3(12.0, 3.1, 7.4))) * 0.55;
+  vec2 idle = flow * amp;
+
+  // A few tiny edge particles ease out along their normal, then come home.
+  if (aExcursion.x > 0.0 && aSize < 3.2) {
+    float cyc = fract(uTime / max(aExcursion.y, 10.0) + aExcursion.z);
+    float lobe = smoothstep(0.04, 0.3, cyc) * (1.0 - smoothstep(0.3, 0.66, cyc));
+    float reach = mix(2.88, 5.12, clamp((aExcursion.x - 6.0) / 10.0, 0.0, 1.0));
+    idle += aNormal * reach * lobe * uExcursion;
   }
-  pos += idle * e;
+  pos += idle * e * uDrift;
 
   // Scroll dispersal: outward from the duck's center, with a noisy swirl.
   float s = uScroll * uScroll;
@@ -111,7 +118,7 @@ void main() {
     float angle = aRandom.w * 6.2831853;
     vec2 dir = normalize(aTarget + vec2(cos(angle), sin(angle)) * 0.35 + 1e-4);
     pos += dir * aRandom.z * s;
-    pos += vec2(snoise(np * 0.5 + 5.0), snoise(np * 0.5 + 9.0)) * 140.0 * s;
+    pos += vec2(snoise(fine * 0.5 + 5.0), snoise(fine * 0.5 + 9.0)) * 140.0 * s;
   }
 
   pos += aOffset;
@@ -160,8 +167,9 @@ ${simplex}
 
 void main() {
   vec2 pos = aNearDuck > 0.5 ? aPos * uScale + uCenter : aPos * uViewport;
-  vec3 np = vec3(aPos * 2.0, uTime * 0.03 + aRand.z * 10.0);
-  pos += vec2(snoise(np), snoise(np + 11.0)) * uDrift * 2.5;
+  vec3 np = vec3(aPos * 1.6, uTime * 0.18 + aRand.z * 0.45);
+  float amp = mix(24.0, 16.0, aNearDuck);
+  pos += vec2(snoise(np), snoise(np + 11.0)) * amp * uDrift;
   vec2 away = pos - uCenter;
   pos += away / (length(away) + 1.0) * uScroll * uScroll * 90.0;
 

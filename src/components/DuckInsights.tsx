@@ -112,7 +112,6 @@ export function DuckInsights({
               key={item.id}
               item={item}
               fading={leavingId === item.id}
-              tilt={index % 2 === 0 ? "right" : "left"}
               onOpen={(origin) => openReport(item, origin)}
             />
           ),
@@ -148,13 +147,11 @@ function ReportPreview({
   item,
   faded = false,
   fading = false,
-  tilt = "right",
   onOpen,
 }: {
   item: DuckInsight;
   faded?: boolean;
   fading?: boolean;
-  tilt?: "left" | "right";
   onOpen?: (origin: DOMRect) => void;
 }) {
   const watch = item.valence === "watch_out";
@@ -213,9 +210,7 @@ function ReportPreview({
     <button
       id={`report-${item.id}`}
       type="button"
-      className={`${shared} cursor-pointer transition duration-200 hover:z-10 hover:shadow-[0_18px_40px_rgb(29_29_31/0.1)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink motion-safe:hover:-translate-y-1.5 motion-safe:hover:scale-[1.01] ${
-        tilt === "left" ? "motion-safe:hover:-rotate-[0.4deg]" : "motion-safe:hover:rotate-[0.4deg]"
-      }`}
+      className={`${shared} card-lift cursor-pointer hover:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink`}
       onClick={(event) => onOpen(event.currentTarget.getBoundingClientRect())}
     >
       {body}

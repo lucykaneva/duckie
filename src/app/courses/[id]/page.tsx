@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { createSection, getConcepts, getCourses, getSections } from "@/lib/api";
+import { createSection, getConcepts, getCourses, getSections, isSample } from "@/lib/api";
 import type { Section, SectionType } from "@/lib/duck/types";
 import { ChapterSheet } from "@/components/course/ChapterSheet";
 import { Button } from "@/components/ui/Button";
@@ -21,6 +21,7 @@ export default function CourseSectionsPage() {
   const [sections, setSections] = useState<Section[]>([]);
   const [itemCounts, setItemCounts] = useState<Record<string, number>>({});
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [sample, setSample] = useState(false);
   const [reload, setReload] = useState(0);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -39,11 +40,15 @@ export default function CourseSectionsPage() {
         const match = courses?.find((course) => course.id === courseId);
         setCourseName(match?.name || "Course");
         setSections(list);
+        setSample(isSample(list));
         setStatus("ready");
         Promise.all(
           list.map((section) =>
             getConcepts(section.id)
-              .then((concepts) => [section.id, concepts.length] as const)
+              .then((concepts) => {
+                if (isSample(concepts)) setSample(true);
+                return [section.id, concepts.length] as const;
+              })
               .catch(() => [section.id, 0] as const),
           ),
         ).then((pairs) => {
@@ -94,6 +99,11 @@ export default function CourseSectionsPage() {
 
   return (
     <main className="mx-auto w-full max-w-content px-5 py-14">
+      {sample ? (
+        <span className="mb-4 inline-flex rounded-full border border-border px-2.5 py-0.5 text-small text-ink-muted">
+          Sample data
+        </span>
+      ) : null}
       <nav aria-label="Breadcrumb" className="text-small text-ink-muted">
         <Link href="/courses" className="text-ink underline-offset-2 hover:underline">
           Courses

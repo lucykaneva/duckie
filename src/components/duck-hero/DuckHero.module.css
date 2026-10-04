@@ -1,20 +1,22 @@
 .page {
   --bg: var(--color-bg);
   --ink: #1d1d1f;
-  --ink-quiet: #5c5b57;
   width: 100%;
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans);
 }
 
-/* Tall track: the sticky stage stays pinned while scrolling disperses the particles. */
+/* Tall track: the sticky stage stays pinned while scrolling disperses the duck, then reveals the line. */
 .hero {
   position: relative;
-  height: 220vh;
+  height: 304vh;
 }
 
 .stage {
+  --headline: 0;
+  --rise: 0;
+  --hint: 1;
   position: sticky;
   top: 0;
   height: 100vh;
@@ -31,83 +33,86 @@
   display: block;
 }
 
-.copy {
+.title {
   position: absolute;
   z-index: 2;
-  left: clamp(16px, 7vw, 120px);
+  left: 50%;
   top: 50%;
-  transform: translateY(-50%);
-  max-width: 40rem;
-  pointer-events: none;
-}
-
-.eyebrow {
-  margin: 0 0 12px;
-  font-size: 13px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-quiet);
-}
-
-.title {
+  width: min(16em, calc(100% - 48px));
   margin: 0;
+  transform: translate(-50%, calc(-50% - var(--rise) * 78vh));
+  text-align: center;
+  pointer-events: none;
+  opacity: var(--headline);
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: clamp(38px, 4.8vw, 72px);
-  line-height: 1.08;
+  font-size: clamp(40px, 5.4vw, 76px);
+  line-height: 1.05;
   letter-spacing: -0.005em;
 }
 
-.lede {
-  margin: 20px 0 0;
-  font-size: clamp(16px, 1.3vw, 19px);
-  line-height: 1.5;
-  color: var(--ink-quiet);
-  max-width: 24rem;
-}
-
-.scrollHint {
+.hint {
   position: absolute;
-  left: 50%;
-  bottom: 28px;
-  transform: translateX(-50%);
+  z-index: 2;
+  left: 16.666%;
+  top: 50%;
   margin: 0;
-  font-size: 12px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-quiet);
-}
-
-.next {
-  max-width: 44rem;
-  margin: 0 auto;
-  padding: 18vh 16px 30vh;
-}
-
-.next h2 {
-  margin: 0 0 16px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  text-align: center;
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: clamp(32px, 4vw, 52px);
-  line-height: 1.1;
+  font-size: clamp(28px, 3.2vw, 36px);
+  line-height: 1;
+  color: var(--ink);
 }
 
-.next p {
-  margin: 0;
-  font-size: 18px;
-  line-height: 1.6;
-  color: var(--ink-quiet);
+.veil {
+  opacity: var(--hint);
 }
 
-@media (max-width: 900px) {
-  .copy {
-    top: 12vh;
-    transform: none;
-    right: 16px;
-    text-align: center;
-    max-width: none;
+.cue {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  opacity: 0;
+}
+
+.arrow {
+  display: block;
+  width: 22px;
+  height: 28px;
+}
+
+.hint.formed .cue {
+  animation:
+    cue-in 0.7s ease forwards,
+    scroll-cue 2.8s ease-in-out 0.7s infinite;
+}
+
+@keyframes cue-in {
+  from {
+    opacity: 0;
   }
-  .lede {
-    margin-inline: auto;
+  to {
+    opacity: 0.25;
+  }
+}
+
+@keyframes scroll-cue {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hint.formed .cue {
+    animation: none;
+    opacity: 0.35;
   }
 }

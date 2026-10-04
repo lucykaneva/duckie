@@ -13,6 +13,8 @@ export interface ParticleSample {
   alphas: Float32Array;
   normals: Float32Array;
   excursions: Float32Array;
+  /** Signed distance in sample px. Positive is inside the body. Motion only. */
+  depths: Float32Array;
   count: number;
 }
 
@@ -452,8 +454,8 @@ export function samplePixels(
   };
 
   const X: number[] = [], Y: number[] = [], R: number[] = [];
-  const out = { colors: [] as number[], sizes: [] as number[], alphas: [] as number[], normals: [] as number[], excursions: [] as number[] };
-  const add = (x: number, y: number, dpx: number, color: RGB, alpha: number, nrm: [number, number], exc: number[]) => {
+  const out = { colors: [] as number[], sizes: [] as number[], alphas: [] as number[], normals: [] as number[], excursions: [] as number[], depths: [] as number[] };
+  const add = (x: number, y: number, dpx: number, color: RGB, alpha: number, nrm: [number, number], exc: number[], depth: number) => {
     X.push(x);
     Y.push(y);
     R.push(dpx / PX / 2);
@@ -462,6 +464,7 @@ export function samplePixels(
     out.alphas.push(alpha);
     out.normals.push(nrm[0], -nrm[1]);
     out.excursions.push(...exc);
+    out.depths.push(depth);
   };
   const noExcursion = [0, 1, 0];
 
@@ -523,7 +526,7 @@ export function samplePixels(
       const alpha = Math.min(1, base * rand(0.9, 1.08));
       const exc = s < 4 && s > -6 && random() < 0.035 ? [rand(6, 16), rand(12, 24), random()] : noExcursion;
       grid[gy(y) * gw + gx(x)].push(X.length);
-      add(x, y, dpx, colorFor(l, p, y), alpha, nrm, exc);
+      add(x, y, dpx, colorFor(l, p, y), alpha, nrm, exc, s);
       placed++;
     }
     return placed;
@@ -546,7 +549,7 @@ export function samplePixels(
       const p = pixels[(random() * pixels.length) | 0];
       const x = ecx + ((p % w) + random() - ecx) * k;
       const y = ecy + (((p / w) | 0) + random() - ecy) * k;
-      add(x, y, rand(...d), color(), rand(...alpha), [0, 0], noExcursion);
+      add(x, y, rand(...d), color(), rand(...alpha), [0, 0], noExcursion, 24);
     }
   };
   const mouthPixels: number[] = [];
@@ -566,7 +569,7 @@ export function samplePixels(
       // A softer rim instead of a hard-edged disc.
       const rim = m > 0.85;
       if (rim && random() < 0.15) continue;
-      add(x, y, rand(...d) * (rim ? 0.9 : 1), jitter(PALETTE.eye, 0.06), rim ? rand(0.8, 0.95) : rand(0.95, 1), [0, 0], noExcursion);
+      add(x, y, rand(...d) * (rim ? 0.9 : 1), jitter(PALETTE.eye, 0.06), rim ? rand(0.8, 0.95) : rand(0.95, 1), [0, 0], noExcursion, 24);
       placed++;
     }
   }
@@ -587,6 +590,7 @@ export function samplePixels(
     alphas: new Float32Array(out.alphas),
     normals: new Float32Array(out.normals),
     excursions: new Float32Array(out.excursions),
+    depths: new Float32Array(out.depths),
     count: X.length,
   };
 }

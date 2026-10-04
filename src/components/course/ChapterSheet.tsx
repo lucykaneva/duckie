@@ -14,9 +14,12 @@ const DUCK_VARIANTS = ["spark", "swirl", "tilt"] as const;
 
 export function ChapterSheet({ index, name, type, itemCount, href }: ChapterSheetProps) {
   const number = String(index + 1).padStart(2, "0");
-  const tabLabel = type === "project" ? "PROJECT" : "TEST";
-  const tabFill = type === "project" ? "#e4e7f4" : "var(--color-brand-soft)";
+  const isProject = type === "project";
+  const tabLabel = isProject ? "PROJECT" : "TEST";
+  const tabFill = isProject ? "#e4e7f4" : "var(--color-brand-soft)";
   const tabTop = 18 + (index % 3) * 28;
+  const tabRight = isProject ? 738 : 700;
+  const tabLabelX = isProject ? 696 : 677;
   const duckVariant = DUCK_VARIANTS[index % DUCK_VARIANTS.length];
   const countLabel =
     itemCount === undefined
@@ -24,10 +27,10 @@ export function ChapterSheet({ index, name, type, itemCount, href }: ChapterShee
       : `${itemCount} ${itemCount === 1 ? "item" : "items"}`;
 
   return (
-    <Link href={href} className="group relative block" aria-label={name}>
-      <div className="relative transition-transform duration-[200ms] ease-out group-hover:-translate-y-[3px] group-hover:rotate-[0.3deg] group-focus-visible:-translate-y-[3px] group-focus-visible:rotate-[0.3deg]">
+    <Link href={href} className="card-lift group relative block" aria-label={name}>
+      <div className="relative">
         <svg
-          viewBox="0 0 720 128"
+          viewBox="0 0 760 128"
           className="block h-auto w-full drop-shadow-[0_5px_0_#eceae3] transition-[filter] duration-[200ms] ease-out group-hover:drop-shadow-[0_8px_10px_rgb(29_29_31_/_0.10)]"
           aria-hidden="true"
         >
@@ -57,10 +60,10 @@ export function ChapterSheet({ index, name, type, itemCount, href }: ChapterShee
           />
           {/* index tab */}
           <path
-            d={`M656 ${tabTop}
-               C662 ${tabTop - 1} 668 ${tabTop - 1} 698 ${tabTop + 1}
-               C700 ${tabTop + 10} 700 ${tabTop + 22} 698 ${tabTop + 32}
-               C668 ${tabTop + 34} 662 ${tabTop + 34} 656 ${tabTop + 32}
+            d={`M654 ${tabTop}
+               C662 ${tabTop - 1} 670 ${tabTop - 1} ${tabRight - 4} ${tabTop + 1}
+               C${tabRight} ${tabTop + 10} ${tabRight} ${tabTop + 22} ${tabRight - 4} ${tabTop + 32}
+               C670 ${tabTop + 34} 662 ${tabTop + 34} 654 ${tabTop + 32}
                Z`}
             fill={tabFill}
             stroke="var(--color-duck-outline)"
@@ -69,14 +72,14 @@ export function ChapterSheet({ index, name, type, itemCount, href }: ChapterShee
             strokeLinejoin="round"
           />
           <text
-            x="677"
+            x={tabLabelX}
             y={tabTop + 21}
             textAnchor="middle"
             fill="var(--color-ink)"
-            fontSize="8"
+            fontSize={isProject ? "7.5" : "8"}
             fontFamily="var(--font-sans)"
             fontWeight="500"
-            letterSpacing="1.8"
+            letterSpacing={isProject ? "1.1" : "1.8"}
           >
             {tabLabel}
           </text>
@@ -84,7 +87,11 @@ export function ChapterSheet({ index, name, type, itemCount, href }: ChapterShee
 
         {index === 0 ? <PaperClip /> : null}
 
-        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center gap-8 pr-[88px] pl-8 sm:pl-10">
+        <div
+          className={`pointer-events-none absolute inset-y-0 left-0 flex items-center gap-8 pl-8 sm:pl-10 ${
+            isProject ? "pr-[22%]" : "pr-[16%]"
+          }`}
+        >
           <div className="w-10 shrink-0 text-center">
             <span className="font-display text-[22px] leading-none font-semibold text-ink-muted">
               {number}
@@ -107,7 +114,9 @@ export function ChapterSheet({ index, name, type, itemCount, href }: ChapterShee
 
         <DuckStamp
           variant={duckVariant}
-          className="pointer-events-none absolute right-[84px] bottom-[28px] size-9"
+          className={`pointer-events-none absolute bottom-[28px] size-9 ${
+            isProject ? "right-[20%]" : "right-[15%]"
+          }`}
         />
       </div>
     </Link>

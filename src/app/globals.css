@@ -6,7 +6,7 @@
   --font-sans and --font-display are the names to use in UI.
 */
 @theme {
-  --color-bg: #e4e3df;
+  --color-bg: #eef1e8;
   --color-surface: #ffffff;
   --color-ink: #1d1d1f;
   --color-ink-muted: #5c5b57;
@@ -95,6 +95,19 @@
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--color-ink-muted);
+}
+
+/* Same lift as the course books — use on every card surface. */
+@utility card-lift {
+  transition-property: transform;
+  transition-duration: 200ms;
+  transition-timing-function: ease-out;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .card-lift:is(:hover, :focus-visible) {
+    transform: translateY(-5px) rotate(1deg);
+  }
 }
 
 html {
@@ -240,5 +253,39 @@ select[aria-invalid="true"]:focus-visible {
   .report-slide-next,
   .report-slide-prev {
     animation: none;
+  }
+}
+
+/* Courses bookshelf: heading and 8-slot grid share the same inline edges. */
+.course-shelf {
+  width: 100%;
+  padding-block: 3.5rem;
+  padding-inline: clamp(24px, 10vw, 160px);
+}
+
+.course-shelf-grid {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, 1fr);
+  justify-items: center;
+  column-gap: clamp(3rem, 4vw, 4rem);
+  row-gap: clamp(3.5rem, 5vw, 4.5rem);
+}
+
+@media (max-width: 639px) {
+  .course-shelf {
+    padding-inline: 22px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .course-shelf-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .course-shelf {
+    padding-inline: 160px;
   }
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { getReviewDue } from "@/lib/api";
+import { getReviewDue, isSample } from "@/lib/api";
 import { isoDay } from "@/lib/mock/dates";
 
 const LINKS = [
@@ -16,21 +16,25 @@ function isSessionScreen(pathname: string): boolean {
   return /^\/sessions\/[^/]+\/?$/.test(pathname);
 }
 
+function isLanding(pathname: string): boolean {
+  return pathname === "/" || pathname === "/landing";
+}
+
 function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 export function AppHeader() {
   const pathname = usePathname() ?? "";
-  const hidden = isSessionScreen(pathname);
+  const hidden = isSessionScreen(pathname) || isLanding(pathname);
   const [dueCount, setDueCount] = useState(0);
 
   useEffect(() => {
     if (hidden) return;
     let cancelled = false;
-    getReviewDue({ mock: true })
+    getReviewDue()
       .then((list) => {
-        if (cancelled) return;
+        if (cancelled || isSample(list)) return;
         const today = isoDay(0);
         setDueCount(list.filter((item) => item.due <= today).length);
       })

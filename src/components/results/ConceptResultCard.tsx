@@ -58,7 +58,7 @@ export function ConceptResultCard({ concept }: { concept: ResultsConcept }) {
   const quote = concept.quotes?.[0];
 
   return (
-    <article className="overflow-hidden rounded-card border border-border bg-surface">
+    <article className="card-lift overflow-hidden rounded-card border border-border bg-surface">
       <div className="flex">
         <div aria-hidden="true" className={`w-1.5 shrink-0 ${STATE_EDGE[concept.state]}`} />
         <div className="min-w-0 flex-1 px-6 py-5">

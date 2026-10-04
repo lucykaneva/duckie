@@ -14,6 +14,8 @@ interface Options {
   scrollTrack: HTMLElement;
   /** Image url. */
   src: string;
+  /** Fires once the duck has finished forming. */
+  onFormed?: () => void;
 }
 
 export class DuckParticles {
@@ -22,6 +24,8 @@ export class DuckParticles {
   private src: string;
   private reducedMotion: boolean;
   private disposed = false;
+  private formed = false;
+  private onFormed?: () => void;
 
   private pointer = { x: 0, y: 0, active: false };
   private scroll = 0;
@@ -66,13 +70,17 @@ export class DuckParticles {
   private onScroll = () => {
     const rect = this.scrollTrack.getBoundingClientRect();
     const travel = Math.max(1, rect.height - innerHeight);
-    this.scrollTarget = Math.min(1, Math.max(0, -rect.top / travel));
+    const progress = Math.min(1, Math.max(0, -rect.top / travel));
+    // Dispersal still finishes at the same scroll distance. The track is longer
+    // only so the headline can sit before Courses.
+    this.scrollTarget = Math.min(1, progress / 0.406);
   };
 
-  constructor({ container, scrollTrack, src }: Options) {
+  constructor({ container, scrollTrack, src, onFormed }: Options) {
     this.container = container;
     this.scrollTrack = scrollTrack;
     this.src = src;
+    this.onFormed = onFormed;
     this.reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
 
@@ -111,8 +119,7 @@ export class DuckParticles {
         uSpread: { value: 1 },
         uSize: { value: 1 },
         uPixelRatio: { value: this.renderer.getPixelRatio() },
-        uDrift: { value: this.reducedMotion ? 0.8 : 2.4 },
-        uMicro: { value: this.reducedMotion ? 0 : 0.7 },
+        uDrift: { value: this.reducedMotion ? 0 : 1 },
         uExcursion: { value: this.reducedMotion ? 0 : 1 },
       },
     });
@@ -129,7 +136,7 @@ export class DuckParticles {
     this.start();
   }
 
-  private buildGeometry({ targets, colors, sizes, alphas, normals, excursions, count }: ParticleSample) {
+  private buildGeometry({ targets, colors, sizes, alphas, normals, excursions, depths, count }: ParticleSample) {
     const scatter = new Float32Array(count * 2);
     const random = new Float32Array(count * 4);
     for (let i = 0; i < count; i++) {
@@ -158,6 +165,7 @@ export class DuckParticles {
     g.setAttribute('aAlpha', new THREE.BufferAttribute(alphas, 1));
     g.setAttribute('aNormal', new THREE.BufferAttribute(normals, 2));
     g.setAttribute('aExcursion', new THREE.BufferAttribute(excursions, 3));
+    g.setAttribute('aDepth', new THREE.BufferAttribute(depths, 1));
     this.offsetAttr = new THREE.BufferAttribute(this.offset, 2).setUsage(THREE.DynamicDrawUsage);
     g.setAttribute('aOffset', this.offsetAttr);
     this.geometry = g;
@@ -240,12 +248,32 @@ export class DuckParticles {
     Object.assign(this.camera, { left: -w / 2, right: w / 2, top: h / 2, bottom: -h / 2 });
     this.camera.updateProjectionMatrix();
 
-    const wide = w > 900;
-    // Duck sits right of the headline on wide screens, centered on narrow ones.
-    // 4/3 keeps the current composition and just grows the bird by a third.
-    const grow = 4 / 3;
-    this.scale = (wide ? Math.min(h * 0.78, w * 0.48) : Math.min(h * 0.55, w * 0.9)) * grow;
-    this.center = wide ? { x: w * 0.23, y: 0 } : { x: 0, y: -h * 0.12 };
+    // The PNG is a square with empty margin. These are the bird's own width and height
+    // as a fraction of that square, so scale describes the duck, not the file.
+    const duckW = 0.894;
+    const duckH = 0.751;
+    // Silhouette center, and its edges, in the same normalized space as aTarget (y up).
+    const contentX = 0.0133;
+    const bottomN = -0.4189;
+    const leftN = -0.4333;
+    const rightN = 0.46;
+    const floorGap = 40;
+    const headroom = 36;
+    // Room past the silhouette for the tail tip, particle radius, and a short wander.
+    const tailPad = 48;
+    const widthScale = (w * 0.625) / duckW;
+    const heightScale = Math.max(1, h - floorGap - headroom) / duckH;
+    this.scale = Math.min(widthScale, heightScale);
+
+    const halfW = w / 2;
+    let cx = w / 6 - contentX * this.scale;
+    const rightEdge = rightN * this.scale + cx;
+    if (rightEdge > halfW - tailPad) cx -= rightEdge - (halfW - tailPad);
+    const leftEdge = leftN * this.scale + cx;
+    if (leftEdge < -halfW + 24) cx += -halfW + 24 - leftEdge;
+    // Lowest body particles rest just above the viewport bottom.
+    const cy = -h / 2 + floorGap - bottomN * this.scale;
+    this.center = { x: cx, y: cy };
 
     const u = this.material.uniforms;
     u.uScale.value = this.scale;
@@ -279,6 +307,10 @@ export class DuckParticles {
 
     u.uTime.value = (now - this.startTime) / 1000;
     if (!this.reducedMotion) u.uAssemble.value = Math.min(1, (now - this.startTime) / INTRO_MS);
+    if (!this.formed && u.uAssemble.value >= 1) {
+      this.formed = true;
+      if (!this.disposed) this.onFormed?.();
+    }
 
     // Ease scroll so dispersal glides instead of snapping to wheel steps.
     this.scroll += (this.scrollTarget - this.scroll) * (1 - Math.exp(-dt * 8));

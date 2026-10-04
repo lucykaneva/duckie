@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { getResults } from "@/lib/api";
-import { MOCK_RESULTS } from "@/lib/mock/results";
+import { getResults, isSample } from "@/lib/api";
 import type { SessionResults } from "@/lib/duck/types";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -11,6 +10,12 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { DuckInsights } from "@/components/DuckInsights";
 import { GapChart } from "@/components/results/GapChart";
+import {
+  BestMomentSparkle,
+  IllusionDuck,
+  ScoreUnderline,
+  TeachAgainArrow,
+} from "@/components/results/ResultsDoodles";
 import {
   ConceptResultCard,
   STATE_LABEL,
@@ -26,23 +31,17 @@ export default function SessionResultsPage() {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
+  const [sample, setSample] = useState(false);
 
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
-    const useMock = new URLSearchParams(window.location.search).get("mock") === "1";
-
-    if (useMock) {
-      setResults({ ...MOCK_RESULTS, sessionId });
-      setStatus("ready");
-      return;
-    }
-
     setStatus("loading");
     setError("");
     getResults(sessionId)
       .then((data) => {
         if (cancelled) return;
+        setSample(isSample(data));
         setResults(data);
         setStatus("ready");
       })
@@ -80,6 +79,11 @@ export default function SessionResultsPage() {
 
   return (
     <main className="mx-auto w-full max-w-content px-5 py-14">
+      {sample ? (
+        <span className="mb-4 inline-flex rounded-full border border-border px-2.5 py-0.5 text-small text-ink-muted">
+          Sample data
+        </span>
+      ) : null}
       {status === "loading" ? (
         <>
           <header>
@@ -139,19 +143,28 @@ export default function SessionResultsPage() {
               <GapChart felt={felt} understood={understood} />
             </div>
 
-            <div className="mt-8">
+            <div className="relative mt-8 pr-20">
               <p className="text-label">Illusion score</p>
-              <p className="mt-2 text-display">{results.illusionScore}</p>
-              <p className="mt-2 text-lead">Gap between feeling and knowing.</p>
+              <p className="relative mt-2 w-fit text-display">
+                {results.illusionScore}
+                <ScoreUnderline className="pointer-events-none absolute top-[calc(100%+2px)] left-0 h-[1.15rem] w-[7.4rem]" />
+              </p>
+              <p className="mt-3 text-lead">Gap between feeling and knowing.</p>
+              <IllusionDuck
+                score={results.illusionScore}
+                className="pointer-events-none absolute top-5 right-0 size-[72px]"
+              />
             </div>
           </Card>
 
           <div className="mt-8 grid gap-4 sm:grid-cols-2">
-            <Card>
+            <Card className="relative">
+              <BestMomentSparkle className="pointer-events-none absolute top-4 right-4 size-4" />
               <p className="text-label">Best moment</p>
               <p className="mt-3 text-body">{results.strongestMoment}</p>
             </Card>
-            <Card>
+            <Card className="relative">
+              <TeachAgainArrow className="pointer-events-none absolute top-4 right-4 h-4 w-6" />
               <p className="text-label">Teach duckie again</p>
               <p className="mt-3 text-body">{results.reviseNext}</p>
             </Card>
