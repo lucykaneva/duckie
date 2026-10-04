@@ -54,13 +54,18 @@ interface ConceptRow {
 /** Scores are stored as REAL; round away float noise so thresholds compare exactly. */
 const cleanScore = (value: number): number => Math.round(value * 1e6) / 1e6;
 
-async function loadDefs(client: PoolClient, sectionId: string): Promise<ConceptDef[]> {
+async function loadDefs(
+  client: PoolClient,
+  sectionId: string,
+  documentId?: string,
+): Promise<ConceptDef[]> {
   const { rows } = await client.query<ConceptRow>(
     `SELECT id, topic, name, slide, kind, misconceptions, check_prompt, plants_misconception, fallback_questions
        FROM concepts
       WHERE section_id = $1
+        AND ($2::text IS NULL OR document_id = $2)
       ORDER BY slide, id`,
-    [sectionId],
+    [sectionId, documentId ?? null],
   );
   return rows.map((r) => ({
     id: r.id,
@@ -98,11 +103,13 @@ export async function createSession(input: {
   sectionId: string;
   topic: string;
   confidence: number;
+  /** When set, the session practices this upload only. */
+  documentId?: string;
 }): Promise<CreatedSession | null> {
   const client = await getPool().connect();
   try {
     await client.query("BEGIN");
-    const defs = await loadDefs(client, input.sectionId);
+    const defs = await loadDefs(client, input.sectionId, input.documentId);
     if (defs.length === 0) {
       await client.query("ROLLBACK");
       return null;
@@ -209,13 +216,15 @@ async function lockAndLoad(
   );
 
   const sectionId = row.rows[0].section_id;
-  const defs = await loadDefs(client, sectionId);
   const states = await client.query<ConceptStateRow>(
     `SELECT concept_id, state, score, level_reached, moves, failed_attempts, skipped, celebrated
        FROM concept_state WHERE session_id = $1`,
     [sessionId],
   );
   const byId = new Map(states.rows.map((r) => [r.concept_id, r]));
+  const loaded = await loadDefs(client, sectionId);
+  // A later upload must not join a session that already started.
+  const defs = byId.size > 0 ? loaded.filter((def) => byId.has(def.id)) : loaded;
   const last = await client.query<{ n: number; move_kind: MoveKind | null; concept_id: string | null }>(
     `SELECT n, move_kind, concept_id FROM turns WHERE session_id = $1 ORDER BY n DESC LIMIT 1`,
     [sessionId],

@@ -40,6 +40,10 @@ export interface Concept {
   slide: number;
   kind: ConceptKind;
   misconceptions: string[];
+  /** The upload these ideas came from, when the chapter has more than one. */
+  documentId?: string | null;
+  /** Original file name for that upload. */
+  filename?: string | null;
 }
 
 export interface ConceptForJudge {

@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import type { PoolClient } from "pg";
 import type { Concept, UploadJob } from "../duck/types";
 import { EXTRACT } from "../duck/config";
 import { ExtractError } from "../extract/errors";
@@ -8,8 +7,8 @@ import type { FetchLike } from "../extract/grok";
 import type { ExtractedConcept } from "../extract/validate";
 import { getPool } from "./client";
 
-// Uploads: one file per section. Page text is saved page by page because scanned pages are
-// transcribed in separate requests. Concepts are replaced only when a new extraction succeeds.
+// A chapter keeps every upload. Page text is saved page by page because scanned pages are
+// transcribed in separate requests. A new file adds concepts; it does not remove the old ones.
 
 export interface NewPage {
   num: number;
@@ -31,11 +30,6 @@ export async function beginUpload(input: {
     if (section.rowCount === 0) {
       throw new ExtractError("section_not_found", "That section doesn't exist.");
     }
-    await assertSectionUnused(client, input.sectionId);
-
-    // One file at a time: a new upload replaces an older, possibly unfinished, one.
-    await client.query(`DELETE FROM documents WHERE section_id = $1`, [input.sectionId]);
-
     const documentId = `doc_${randomUUID().slice(0, 8)}`;
     const readyToExtract = input.pages.every((p) => p.text !== null);
     await client.query(
@@ -56,16 +50,6 @@ export async function beginUpload(input: {
     throw error;
   } finally {
     client.release();
-  }
-}
-
-async function assertSectionUnused(client: PoolClient, sectionId: string): Promise<void> {
-  const used = await client.query(`SELECT 1 FROM sessions WHERE section_id = $1 LIMIT 1`, [sectionId]);
-  if ((used.rowCount ?? 0) > 0) {
-    throw new ExtractError(
-      "section_in_use",
-      "This section already has practice sessions, so its slides can't be replaced. Create a new section for the new file.",
-    );
   }
 }
 
@@ -182,23 +166,17 @@ async function saveExtraction(documentId: string, concepts: ExtractedConcept[], 
     const sectionId = doc.rows[0].section_id;
 
     await client.query(`SELECT 1 FROM sections WHERE id = $1 FOR UPDATE`, [sectionId]);
-    await assertSectionUnused(client, sectionId);
-
-    await client.query(
-      `DELETE FROM concept_secrets WHERE concept_id IN (SELECT id FROM concepts WHERE section_id = $1)`,
-      [sectionId],
-    );
-    await client.query(`DELETE FROM concepts WHERE section_id = $1`, [sectionId]);
 
     for (const c of concepts) {
       const id = `c_${randomUUID().slice(0, 8)}`;
       await client.query(
         `INSERT INTO concepts
-           (id, section_id, topic, name, slide, kind, misconceptions, check_prompt, fallback_questions, plants_misconception)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10)`,
+           (id, section_id, document_id, topic, name, slide, kind, misconceptions, check_prompt, fallback_questions, plants_misconception)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11)`,
         [
           id,
           sectionId,
+          documentId,
           c.topic,
           c.name,
           c.slide,
@@ -231,11 +209,16 @@ async function saveExtraction(documentId: string, concepts: ExtractedConcept[], 
   }
 }
 
-export async function listPublicConcepts(sectionId: string): Promise<Concept[]> {
+export async function listPublicConcepts(sectionId: string, documentId?: string): Promise<Concept[]> {
   const { rows } = await getPool().query<Concept>(
-    `SELECT id, topic, name, slide, kind, misconceptions
-       FROM concepts WHERE section_id = $1 ORDER BY slide, id`,
-    [sectionId],
+    `SELECT c.id, c.topic, c.name, c.slide, c.kind, c.misconceptions,
+            c.document_id AS "documentId", d.filename
+       FROM concepts c
+       LEFT JOIN documents d ON d.id = c.document_id
+      WHERE c.section_id = $1
+        AND ($2::text IS NULL OR c.document_id = $2)
+      ORDER BY c.slide, c.id`,
+    [sectionId, documentId ?? null],
   );
   return rows;
 }
@@ -273,7 +256,7 @@ export async function getUploadStatus(sectionId: string): Promise<UploadJob | nu
 
   const base = { sectionId, documentId: d.id, filename: d.filename, pageCount: d.page_count };
   if (d.status === "error") return { status: "error", ...base, error: d.error ?? FAILED_GENERIC };
-  if (d.status === "ready") return { status: "ready", ...base, concepts: await listPublicConcepts(sectionId) };
+  if (d.status === "ready") return { status: "ready", ...base, concepts: await listPublicConcepts(sectionId, d.id) };
 
   const pending = await pool.query<{ page: number }>(
     `SELECT page FROM document_pages WHERE document_id = $1 AND text IS NULL ORDER BY page`,

@@ -207,7 +207,7 @@ export default function SectionUploadPage() {
 
   return (
     <main className="mx-auto w-full max-w-content px-5 py-14">
-      <SectionBreadcrumb sectionId={sectionId} />
+      <SectionBreadcrumb sectionId={sectionId} linkSection />
 
       <header className="mt-6">
         <p className="text-label">Add material</p>
@@ -338,8 +338,11 @@ export default function SectionUploadPage() {
               ))}
             </div>
 
-            <div className="mt-8">
-              <ButtonLink href={`/sections/${sectionId}/start`}>Teach duckie</ButtonLink>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <ButtonLink href={`/sections/${sectionId}`}>See material</ButtonLink>
+              <ButtonLink href={`/sections/${sectionId}/start`} variant="ink">
+                Teach duckie
+              </ButtonLink>
             </div>
           </>
         ) : null}

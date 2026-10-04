@@ -5,10 +5,12 @@ export async function POST(request: Request) {
     sectionId?: unknown;
     topic?: unknown;
     confidence?: unknown;
+    documentId?: unknown;
   } | null;
 
   const sectionId = typeof body?.sectionId === "string" ? body.sectionId.trim() : "";
   const topic = typeof body?.topic === "string" ? body.topic.trim() : "";
+  const documentId = typeof body?.documentId === "string" ? body.documentId.trim() : "";
   const confidence = body?.confidence;
 
   if (!sectionId || !topic) {
@@ -19,7 +21,12 @@ export async function POST(request: Request) {
   }
 
   try {
-    const session = await createSession({ sectionId, topic, confidence });
+    const session = await createSession({
+      sectionId,
+      topic,
+      confidence,
+      documentId: documentId || undefined,
+    });
     if (!session) {
       return Response.json({ error: "Section not found or it has no concepts" }, { status: 404 });
     }

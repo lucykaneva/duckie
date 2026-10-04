@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { getConcepts, isSample } from "@/lib/api";
 import { createDuckSession } from "@/lib/duck-runtime";
 import type { Concept } from "@/lib/duck/types";
@@ -17,6 +17,9 @@ export default function SessionStartPage() {
   const params = useParams<{ id: string }>();
   const sectionId = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedTopic = searchParams.get("topic");
+  const documentId = searchParams.get("document");
 
   const [concepts, setConcepts] = useState<Concept[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -35,9 +38,15 @@ export default function SessionStartPage() {
     getConcepts(sectionId)
       .then((list) => {
         if (cancelled) return;
+        const scoped = documentId ? list.filter((concept) => concept.documentId === documentId) : list;
+        const using = scoped.length > 0 ? scoped : list;
         setSample(isSample(list));
-        setConcepts(list);
-        setTopic(list[0]?.topic ?? "");
+        setConcepts(using);
+        const named =
+          requestedTopic && using.some((concept) => concept.topic === requestedTopic)
+            ? requestedTopic
+            : (using[0]?.topic ?? "");
+        setTopic(named);
         setStatus("ready");
       })
       .catch(() => {
@@ -47,7 +56,7 @@ export default function SessionStartPage() {
     return () => {
       cancelled = true;
     };
-  }, [sectionId, reload]);
+  }, [sectionId, reload, requestedTopic, documentId]);
 
   const topics = useMemo(() => {
     const counts = new Map<string, number>();
@@ -62,7 +71,12 @@ export default function SessionStartPage() {
     setStarting(true);
     setStartError("");
     try {
-      const duck = createDuckSession({ sectionId, topic, confidence });
+      const duck = createDuckSession({
+        sectionId,
+        topic,
+        confidence,
+        documentId: documentId || undefined,
+      });
       await duck.start();
       if (!duck.id) {
         throw new Error("Couldn't start. Check the microphone and try again.");
@@ -81,7 +95,7 @@ export default function SessionStartPage() {
           Sample data
         </span>
       ) : null}
-      <SectionBreadcrumb sectionId={sectionId} />
+      <SectionBreadcrumb sectionId={sectionId} linkSection />
 
       <header className="mt-6">
         <p className="text-label">New session</p>

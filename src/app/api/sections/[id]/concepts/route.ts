@@ -10,10 +10,12 @@ export async function GET(
     // Explicit columns only. Never select from concept_secrets, and never
     // return check_prompt or fallback_questions (the engine uses those).
     const { rows } = await getPool().query<Concept>(
-      `SELECT id, topic, name, slide, kind, misconceptions
-         FROM concepts
-        WHERE section_id = $1
-        ORDER BY slide, id`,
+      `SELECT c.id, c.topic, c.name, c.slide, c.kind, c.misconceptions,
+              c.document_id AS "documentId", d.filename
+         FROM concepts c
+         LEFT JOIN documents d ON d.id = c.document_id
+        WHERE c.section_id = $1
+        ORDER BY c.slide, c.id`,
       [id],
     );
     return Response.json(rows);

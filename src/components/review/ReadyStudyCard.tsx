@@ -38,6 +38,8 @@ type ReadyStudyCardProps = {
   index?: number;
   /** Bottom line. Ready now says Review; coming up says the due day. */
   cta?: string;
+  /** One short line under the name. Chapter material uses this for the slide and the trap. */
+  detail?: string;
   /**
    * Topic doodle. Each card can take its own asset once those exist.
    * Defaults to the simple landing duck.
@@ -51,6 +53,7 @@ export function ReadyStudyCard({
   href,
   index = 0,
   cta = "Review",
+  detail,
   illustrationSrc,
   illustration,
 }: ReadyStudyCardProps) {
@@ -126,15 +129,29 @@ export function ReadyStudyCard({
         />
       </svg>
 
-      <div className="relative flex h-[42%] items-center justify-center bg-transparent px-6 pb-2 pt-6">
+      <div
+        className={`relative flex items-center justify-center bg-transparent px-6 pb-2 pt-6 ${
+          detail ? "h-[32%]" : "h-[42%]"
+        }`}
+      >
         <div className="bg-transparent" style={{ backgroundColor: "transparent" }}>
           {illustration ?? <TopicDoodle name={name} fallbackSrc={illustrationSrc} />}
         </div>
       </div>
 
-      <div className="relative flex h-[33%] flex-col items-center justify-start bg-transparent px-5 pt-1 text-center">
-        <h3 className="font-display text-[26px] leading-[30px] font-semibold text-ink">{name}</h3>
-        <svg viewBox="0 0 64 8" className="mt-2 h-2 w-14 overflow-visible" aria-hidden="true">
+      <div
+        className={`relative flex min-h-0 flex-col items-center justify-start overflow-hidden bg-transparent px-5 pt-1 text-center ${
+          detail ? "h-[43%]" : "h-[33%]"
+        }`}
+      >
+        <h3
+          className={`font-display font-semibold text-ink ${
+            detail ? "text-[22px] leading-[26px]" : "text-[26px] leading-[30px]"
+          }`}
+        >
+          {name}
+        </h3>
+        <svg viewBox="0 0 64 8" className="mt-2 h-2 w-14 shrink-0 overflow-visible" aria-hidden="true">
           <path
             d={UNDERLINES[variant]}
             fill="none"
@@ -144,6 +161,9 @@ export function ReadyStudyCard({
             strokeLinecap="round"
           />
         </svg>
+        {detail ? (
+          <p className="mt-2 line-clamp-2 text-[13px] leading-[18px] text-ink-muted">{detail}</p>
+        ) : null}
       </div>
 
       <div className="relative flex h-[25%] items-center justify-center bg-transparent">

@@ -44,6 +44,8 @@ CREATE TABLE document_pages (
 CREATE TABLE concepts (
   id TEXT PRIMARY KEY,
   section_id TEXT NOT NULL REFERENCES sections (id),
+  -- Which upload these ideas came from. Null only for concepts saved before decks could stack.
+  document_id TEXT REFERENCES documents (id) ON DELETE SET NULL,
   topic TEXT NOT NULL,
   name TEXT NOT NULL,
   slide INTEGER,

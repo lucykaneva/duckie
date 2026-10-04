@@ -31,6 +31,8 @@ export interface DuckSessionOptions {
   topic: string;
   confidence: number;
   deviceId?: string;
+  /** Limits the session to one upload when the chapter has several. */
+  documentId?: string;
   /** Where the duck's voice is played. Empty means the computer's current default speaker. */
   sinkId?: string;
   transport?: DuckTransport;
@@ -88,8 +90,11 @@ export class DuckSession {
         this.ready = { resolve, reject };
       });
       void this.voice.start(this.options.deviceId, this.options.sinkId);
-      const { sectionId, topic, confidence } = this.options;
-      const [start] = await Promise.all([this.transport.startSession({ sectionId, topic, confidence }), connected]);
+      const { sectionId, topic, confidence, documentId } = this.options;
+      const [start] = await Promise.all([
+        this.transport.startSession({ sectionId, topic, confidence, documentId }),
+        connected,
+      ]);
       this.sessionId = start.sessionId;
       this.emit({ type: "started", start });
       this.deliver(start.move, "opening", { armSilence: true });

@@ -291,11 +291,12 @@ export async function startSession(
   sectionId: string,
   topic: string,
   confidence: number,
+  documentId?: string,
 ): Promise<SessionStart> {
   try {
     return await request<SessionStart>("/api/sessions", "start the session", {
       method: "POST",
-      body: JSON.stringify({ sectionId, topic, confidence }),
+      body: JSON.stringify({ sectionId, topic, confidence, documentId }),
     });
   } catch (error) {
     if (!sampleAllowed()) throw error;

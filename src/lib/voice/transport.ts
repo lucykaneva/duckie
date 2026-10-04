@@ -22,7 +22,12 @@ export interface TurnPayload {
 }
 
 export interface DuckTransport {
-  startSession(input: { sectionId: string; topic: string; confidence: number }): Promise<SessionStart & { move: SpokenMove }>;
+  startSession(input: {
+    sectionId: string;
+    topic: string;
+    confidence: number;
+    documentId?: string;
+  }): Promise<SessionStart & { move: SpokenMove }>;
   sendTurn(sessionId: string, turn: TurnPayload): Promise<SpokenMove>;
   /** Resolves to null when the server has nothing to say (HTTP 409), which is not an error. */
   sendSilence(sessionId: string, ms: number): Promise<SpokenMove | null>;

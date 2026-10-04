@@ -7,7 +7,14 @@ import { getCourses, getSections } from "@/lib/api";
 type Trail = { courseId: string; courseName: string; sectionName: string };
 
 /** Courses › course › section, with plain words when a name can't be found. */
-export function SectionBreadcrumb({ sectionId }: { sectionId: string }) {
+export function SectionBreadcrumb({
+  sectionId,
+  linkSection = false,
+}: {
+  sectionId: string;
+  /** On upload and start, the chapter name leads back to its material. */
+  linkSection?: boolean;
+}) {
   const [trail, setTrail] = useState<Trail | null>(null);
 
   // Best effort: there is no endpoint for one section, so walk the courses.
@@ -61,7 +68,13 @@ export function SectionBreadcrumb({ sectionId }: { sectionId: string }) {
         <span>Course</span>
       )}
       <span aria-hidden="true"> › </span>
-      <span>{trail ? trail.sectionName : "Section"}</span>
+      {trail && linkSection ? (
+        <Link href={`/sections/${sectionId}`} className="text-ink underline-offset-2 hover:underline">
+          {trail.sectionName}
+        </Link>
+      ) : (
+        <span>{trail ? trail.sectionName : "Section"}</span>
+      )}
     </nav>
   );
 }

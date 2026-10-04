@@ -47,7 +47,8 @@ export default function CourseSectionsPage() {
             getConcepts(section.id)
               .then((concepts) => {
                 if (isSample(concepts)) setSample(true);
-                return [section.id, concepts.length] as const;
+                const decks = new Set(concepts.map((concept) => concept.documentId || "slides"));
+                return [section.id, concepts.length > 0 ? decks.size : 0] as const;
               })
               .catch(() => [section.id, 0] as const),
           ),
@@ -152,7 +153,7 @@ export default function CourseSectionsPage() {
                 name={section.name}
                 type={section.type}
                 itemCount={itemCounts[section.id]}
-                href={`/sections/${section.id}/upload`}
+                href={`/sections/${section.id}`}
               />
             ))}
           </div>
