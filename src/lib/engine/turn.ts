@@ -36,7 +36,7 @@ import {
   ASK_AGAIN_PROPOSAL_LINE,
   CHECK_IN_LINE,
   LIMIT_PROPOSAL_LINE,
-  OFFER_SKIP_LINE,
+  offerSkipLine,
   OPENING_LINE,
   OPEN_PROMPT_LINE,
   WRAP_UP_LINE,
@@ -595,7 +595,7 @@ export function processTurn(
       return {
         kind: "offer_skip",
         level: c.levelReached,
-        line: OFFER_SKIP_LINE,
+        line: offerSkipLine(defOf(c)?.slide),
         concept: c,
         help: false,
         sessionState: "active",

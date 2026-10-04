@@ -5,6 +5,17 @@ import { DUCK } from "../duck/config";
 
 export const OPENING_LINE = "Ooh! Can you explain it to me? I'm just a duck.";
 export const OFFER_SKIP_LINE = "Want to skip this one?";
+
+/**
+ * The offer when the ladder is used up and the student is still stuck: it points at the slide, so skipping means
+ * "go and look at it, we'll come back" (the idea is marked to revisit). A plain yes moves on, exactly as before.
+ * The 20 s silence offer keeps OFFER_SKIP_LINE.
+ */
+export function offerSkipLine(slide?: number): string {
+  return slide !== undefined && slide > 0
+    ? `This one's tricky. Want to look at slide ${slide} later and move on?`
+    : OFFER_SKIP_LINE;
+}
 export const ACK_LINE = "Got it.";
 /** Backup for the reinforce move (wordMove normally writes it from the student's own words). */
 export const REINFORCE_LINE = "Got it. Can you say that once more in your own words?";
