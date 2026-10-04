@@ -236,6 +236,27 @@ describe("the Grok client", () => {
     expect(calls[0].auth).toBe("Bearer test-key");
   });
 
+  it("strips quotes and space around the key, and does not retry a timeout", async () => {
+    process.env.XAI_API_KEY = ' "test-key" ';
+    const out = await callGrok([{ role: "user", content: "hi" }], {
+      model: "m",
+      timeoutMs: 1_000,
+      fetchImpl: fakeFetch([reply("hello")]),
+    });
+    expect(out).toBe("hello");
+    expect(calls[0].auth).toBe("Bearer test-key");
+
+    const timeout = Object.assign(new Error("timed out"), { name: "TimeoutError" });
+    await expect(
+      callGrok([{ role: "user", content: "hi" }], {
+        model: "m",
+        timeoutMs: 1_000,
+        fetchImpl: fakeFetch([timeout, reply("never")]),
+      }),
+    ).rejects.toMatchObject({ message: /took too long/ });
+    expect(calls).toHaveLength(2);
+  });
+
   it("retries once after a network error or a 500, then succeeds", async () => {
     const out = await callGrok([{ role: "user", content: "hi" }], {
       model: "m",
@@ -263,7 +284,7 @@ describe("the Grok client", () => {
     const rejected = fakeFetch([new Response("{}", { status: 401 }), reply("never reached")]);
     await expect(
       callGrok([{ role: "user", content: "hi" }], { model: "m", timeoutMs: 1_000, fetchImpl: rejected }),
-    ).rejects.toMatchObject({ code: "ai_unavailable" });
+    ).rejects.toMatchObject({ code: "ai_unavailable", message: /rejected the server key/ });
     expect(calls).toHaveLength(3); // 2 for the first call, 1 for the 401
   });
 

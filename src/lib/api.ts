@@ -237,8 +237,8 @@ export async function getUploadStatus(sectionId: string): Promise<UploadStatus |
     throw new Error("Couldn't check the upload. The server didn't respond.");
   }
 
-  // Nothing uploaded yet.
-  if (response.status === 404) return null;
+  // Nothing uploaded yet. 204 is the live route; 404 is an older deploy of the same check.
+  if (response.status === 204 || response.status === 404) return null;
 
   if (!response.ok) {
     throw await errorFor(response, "check the upload");

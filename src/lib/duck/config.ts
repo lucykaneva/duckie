@@ -123,7 +123,8 @@ export const EXTRACT = {
   visionModel: "grok-4.20-non-reasoning",
   extractModel: "grok-4.20-non-reasoning",
   visionTimeoutMs: 40_000,
-  extractTimeoutMs: 90_000,
+  // The extract route's maxDuration is 60s. Leave room to save concepts after Grok replies.
+  extractTimeoutMs: 50_000,
   /** A document stuck extracting for longer than this is reported as failed. */
   extractStuckAfterMs: 5 * 60_000,
 };

@@ -1,12 +1,11 @@
-import { after } from "next/server";
 import type { UploadJob } from "@/lib/duck/types";
-import { beginUpload, getUploadStatus, markFailed, runExtraction, savePageTranscript } from "@/lib/db/documents";
+import { beginUpload, getUploadStatus, markFailed, savePageTranscript } from "@/lib/db/documents";
 import { ExtractError, errorResponse } from "@/lib/extract/errors";
 import { checkUpload, mimeFor, rejectIfHuge } from "@/lib/extract/files";
 import { transcribePage } from "@/lib/extract/grok";
 import { readPdfPages } from "@/lib/extract/pages";
 
-// Extraction runs after the response, so give the function room to finish.
+// Reading the file only. Concept extraction is a second request so it gets this whole limit.
 export const maxDuration = 60;
 
 const SEND_AS_FORM = "Send the file as multipart form data in a field named 'file'.";
@@ -15,7 +14,7 @@ const SEND_AS_FORM = "Send the file as multipart form data in a field named 'fil
  * Start an upload. Send one PDF, or one JPG/PNG photo of notes, as multipart form data.
  * A PDF's typed pages are read here. Pages with no text come back in `imagePagesPending`:
  * the browser renders each to a JPEG and sends it to POST /api/documents/:documentId/pages/:n.
- * A photo is transcribed on the server and needs nothing more from the browser.
+ * A photo is transcribed here. The browser then calls POST /api/documents/:documentId/extract.
  */
 export async function POST(
   request: Request,
@@ -34,12 +33,11 @@ export async function POST(
 
     if (kind === "pdf") {
       const pages = await readPdfPages(bytes);
-      const { documentId, readyToExtract } = await beginUpload({
+      const { documentId } = await beginUpload({
         sectionId,
         filename,
         pages: pages.map((p) => ({ num: p.num, text: p.isImage ? null : p.text })),
       });
-      if (readyToExtract) after(() => runExtraction(documentId));
 
       const job: UploadJob = {
         status: "processing",
@@ -52,19 +50,18 @@ export async function POST(
       return Response.json(job, { status: 202 });
     }
 
-    // A photo or screenshot is a one-page document that goes straight to vision.
+    // A photo is transcribed in this request. Extraction is the browser's next call, so each
+    // stays inside the function limit instead of being cut off after the response is sent.
     const { documentId } = await beginUpload({ sectionId, filename, pages: [{ num: 1, text: null }] });
-    after(async () => {
-      try {
-        const text = await transcribePage({ bytes, mime: mimeFor(kind) });
-        const saved = await savePageTranscript(documentId, 1, text);
-        if (saved.claimed) await runExtraction(documentId);
-      } catch (error) {
-        const message =
-          error instanceof ExtractError ? error.message : "Couldn't read this image. Try a clearer photo.";
-        await markFailed(documentId, message);
-      }
-    });
+    try {
+      const text = await transcribePage({ bytes, mime: mimeFor(kind) });
+      await savePageTranscript(documentId, 1, text);
+    } catch (error) {
+      const message =
+        error instanceof ExtractError ? error.message : "Couldn't read this image. Try a clearer photo.";
+      await markFailed(documentId, message);
+      throw error instanceof ExtractError ? error : new ExtractError("ai_unavailable", message);
+    }
     const job: UploadJob = {
       status: "processing",
       sectionId,
@@ -87,7 +84,8 @@ export async function GET(
   const { id } = await params;
   try {
     const job = await getUploadStatus(id);
-    if (!job) return Response.json({ error: "Nothing has been uploaded to this section yet." }, { status: 404 });
+    // No file yet. 204, not 404: the upload page asks this on load, and a 404 shows up as a failed request.
+    if (!job) return new Response(null, { status: 204 });
     return Response.json(job);
   } catch (error) {
     return errorResponse(error, "Could not read the upload status");

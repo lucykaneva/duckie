@@ -29,12 +29,46 @@ export interface GrokMessage {
   content: GrokContent;
 }
 
-const unavailable = (): ExtractError =>
-  new ExtractError("ai_unavailable", "The AI service didn't respond. Wait a moment and try again.");
+const DIDNT_RESPOND = "The AI service didn't respond. Wait a moment and try again.";
+const KEY_REJECTED = "The AI service rejected the server key. Check XAI_API_KEY on the host.";
+const TOOK_TOO_LONG = "The AI service took too long. Try a smaller file.";
 
-/** One chat call. Retries once on a network error, timeout, 429 or 5xx. */
+/** Vercel env pastes often keep quotes or a trailing newline. Those still count as "set" and then get rejected. */
+function apiKeyFromEnv(): string {
+  const raw = process.env.XAI_API_KEY?.trim() ?? "";
+  return raw.replace(/^['"]|['"]$/g, "").trim();
+}
+
+function isTimeout(error: unknown): boolean {
+  return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+}
+
+async function refusal(response: Response): Promise<ExtractError> {
+  if (response.status === 401 || response.status === 403) {
+    return new ExtractError("ai_unavailable", KEY_REJECTED);
+  }
+  let detail = "";
+  try {
+    const body = (await response.json()) as { error?: unknown };
+    const err = body.error;
+    const message =
+      typeof err === "string"
+        ? err
+        : err && typeof err === "object" && "message" in err && typeof (err as { message?: unknown }).message === "string"
+          ? (err as { message: string }).message
+          : "";
+    detail = message.replace(/\s+/g, " ").trim().slice(0, 140);
+  } catch {
+    detail = "";
+  }
+  console.error(`xAI chat failed: ${response.status}${detail ? ` ${detail}` : ""}`);
+  const text = detail ? `The AI service didn't respond (${response.status}: ${detail}).` : DIDNT_RESPOND;
+  return new ExtractError("ai_unavailable", text);
+}
+
+/** One chat call. Retries once on a network error, 429 or 5xx. A timeout is not retried: the function would already be out of time. */
 export async function callGrok(messages: GrokMessage[], options: GrokOptions): Promise<string> {
-  const apiKey = process.env.XAI_API_KEY;
+  const apiKey = apiKeyFromEnv();
   if (!apiKey) {
     throw new ExtractError("ai_unavailable", "The AI service isn't set up on the server (missing key).");
   }
@@ -57,19 +91,20 @@ export async function callGrok(messages: GrokMessage[], options: GrokOptions): P
         signal: AbortSignal.timeout(options.timeoutMs),
       });
       if (response.status === 429 || response.status >= 500) continue;
-      if (!response.ok) throw unavailable();
+      if (!response.ok) throw await refusal(response);
       const data = (await response.json()) as {
         choices?: Array<{ message?: { content?: string | null } }>;
       };
       const content = data.choices?.[0]?.message?.content;
-      if (typeof content !== "string") throw unavailable();
+      if (typeof content !== "string") throw new ExtractError("ai_unavailable", DIDNT_RESPOND);
       return content;
     } catch (error) {
       if (error instanceof ExtractError) throw error;
-      // Network error or timeout: try once more.
+      if (isTimeout(error)) throw new ExtractError("ai_unavailable", TOOK_TOO_LONG);
+      // Network error: try once more.
     }
   }
-  throw unavailable();
+  throw new ExtractError("ai_unavailable", DIDNT_RESPOND);
 }
 
 const TRANSCRIBE_PROMPT =

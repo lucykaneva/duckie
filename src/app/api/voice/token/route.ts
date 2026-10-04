@@ -1,6 +1,6 @@
 // Mints a short-lived Grok Voice token so the browser never sees XAI_API_KEY.
 export async function POST() {
-  const apiKey = process.env.XAI_API_KEY;
+  const apiKey = process.env.XAI_API_KEY?.trim().replace(/^['"]|['"]$/g, "").trim();
   if (!apiKey) {
     return Response.json({ error: "XAI_API_KEY is not set" }, { status: 500 });
   }

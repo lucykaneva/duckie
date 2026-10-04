@@ -103,6 +103,18 @@ export async function uploadToSection(
     await sendScannedPages(job.documentId, pending, await open(file), doFetch, options, progress);
   }
 
+  // Extraction is its own request. Doing it inside the upload meant Vercel cut the
+  // function off once the file was saved, and the duck reported that Grok never answered.
+  if (job.documentId) {
+    const extracted = await doFetch(`/api/documents/${job.documentId}/extract`, {
+      method: "POST",
+      signal: options.signal,
+    });
+    if (!extracted.ok && extracted.status !== 204) {
+      await failFrom(extracted, "Couldn't read this file. Try again.");
+    }
+  }
+
   progress("analysing", pending.length, pending.length);
   const finished = await pollUntilDone(sectionId, doFetch, options);
   progress("done", pending.length, pending.length);

@@ -35,7 +35,7 @@ export interface ChatMessage {
 
 /** One chat call, no retry: the duck cannot wait for a second attempt. */
 export async function chat(messages: ChatMessage[], options: ChatOptions): Promise<string> {
-  const apiKey = process.env.XAI_API_KEY;
+  const apiKey = process.env.XAI_API_KEY?.trim().replace(/^['"]|['"]$/g, "").trim();
   if (!apiKey) throw new AiError("no_key", "XAI_API_KEY is not set");
   const doFetch: FetchLike = options.fetchImpl ?? ((url, init) => fetch(url, init));
 

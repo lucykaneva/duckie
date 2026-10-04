@@ -41,6 +41,7 @@ function server(options: {
     if (url.endsWith("/upload") && method === "POST") {
       return typeof options.start === "function" ? options.start() : options.start.clone();
     }
+    if (url.endsWith("/extract") && method === "POST") return new Response(null, { status: 204 });
     if (url.endsWith("/upload")) return (polls.length > 1 ? polls.shift()! : polls[0]).clone();
 
     const page = Number(url.split("/").pop());
@@ -94,6 +95,7 @@ describe("uploading a typed PDF", () => {
     expect(opened).toBe(false);
     expect(job.concepts).toHaveLength(1);
     expect(s.calls[0]).toMatchObject({ url: "/api/sections/sec_x/upload", method: "POST" });
+    expect(s.calls).toContainEqual(expect.objectContaining({ url: "/api/documents/doc_1/extract", method: "POST" }));
     expect(progress.map((p) => p.phase)).toEqual(["uploading", "analysing", "done"]);
   });
 });
