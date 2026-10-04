@@ -121,3 +121,9 @@ The demo section is Algorithms → Binary search. Concepts: sorted input, halvin
 
 - [Master build plan](docs/The%20Study%20Duck%20Master%20Build%20Plan.md) covers the API contract and who owns what.
 - [Rules spec](docs/Duck%20When%20the%20Duck%20Speaks%20Up%20(Rules%20Spec).md) covers signals, the help ladder, and the worked example.
+
+## Authors
+
+- [Lucy Kaneva](https://github.com/lucykaneva)
+- [Harini Dave](https://github.com/hdave07)
+- [Angela](https://github.com/angbengi)
