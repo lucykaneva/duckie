@@ -122,8 +122,8 @@ describe("recall intervals", () => {
 
 describe("the wrap-up line and the results shape", () => {
   it("fits in 20 words and names the hole", () => {
-    const line = wrapSummaryLine("You found when it stops.", "The update step");
-    expect(line).toBe("You found when it stops. Revisit the update step.");
+    const line = wrapSummaryLine("Your best bit was when it stops.", "The update step");
+    expect(line).toBe("Your best bit was when it stops. Next time we can try the update step.");
     expect(line.split(/\s+/).length).toBeLessThanOrEqual(20);
   });
 

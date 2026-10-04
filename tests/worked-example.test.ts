@@ -103,7 +103,11 @@ describe("B15 worked example (binary search)", () => {
 
     // Spec turn 1: session opens. Not a /turn.
     const open = speak(openingMove(defs));
-    expect(open).toMatchObject({ kind: "open", level: "L0", line: "Hey. Walk me through this in your words. I'll learn it with you." });
+    expect(open).toMatchObject({
+      kind: "open",
+      level: "L0",
+      line: "I don't really get binary search yet. How does it work?",
+    });
     expect(open.concepts.every((c) => c.state === "not_yet" && c.score === 0)).toBe(true);
 
     let s = freshSession(defs);
@@ -131,11 +135,13 @@ describe("B15 worked example (binary search)", () => {
     });
     expect(stateOf(o.session, "c_12")).toMatchObject({ state: "assisted", score: 0, levelReached: "L1" });
     expect(o.resolved[0].previous).toBeLessThan(DUCK.earnedScore);
-    expect(speak(o.move)).toMatchObject({
+    const movedOn = speak(o.move);
+    expect(movedOn).toMatchObject({ kind: "ack", line: "Got it.", conceptId: "c_12" });
+    expect(movedOn.then).toMatchObject({
       kind: "question",
       level: "L0",
       conceptId: "c_14",
-      line: "Got it. Test me: 1, 3, 5, 7, 9, looking for 6. Which numbers do you check?",
+      line: "Test me: 1, 3, 5, 7, 9, looking for 6. Which numbers do you check?",
     });
     s = o.session;
 
@@ -150,7 +156,7 @@ describe("B15 worked example (binary search)", () => {
       kind: "question",
       level: "L2",
       conceptId: "c_14",
-      line: "Slide 7 shows when it stops. What has to be true to stop?",
+      line: "What has to be true before you stop looking?",
     });
     expect(help.line).not.toMatch(/5\s+and\s+7/);
     s = o.session;
@@ -165,7 +171,7 @@ describe("B15 worked example (binary search)", () => {
     const celebrated = speak(o.move);
     expect(celebrated).toMatchObject({ kind: "celebrate", conceptId: "c_14" });
     // Category is celebrate. Seed fallback says "got"; wordMove may say the spec's "found".
-    expect(celebrated.line).toBe("Ooh, nice. You got when it stops.");
+    expect(celebrated.line).toBe("Mm. You just got when it stops.");
     expect(celebrated.then).toMatchObject({
       kind: "question",
       level: "L0",
@@ -187,28 +193,32 @@ describe("B15 worked example (binary search)", () => {
     });
     s = o.session;
 
-    // Spec turns 8–9: update step assisted, not earned. Engine joins "Got it." with the next L0.
+    // Spec turns 8–9: update step assisted, not earned. "Got it." is its own beat, then the next question.
     o = run(s, "It stays the same… so it loops forever.", {
       judge: { covered: [{ conceptId: "c_15", quote: "it loops forever" }] },
     });
     expect(stateOf(o.session, "c_15")).toMatchObject({ state: "assisted", score: 0 });
     expect(o.resolved[0].previous).toBeLessThan(DUCK.earnedScore);
-    expect(speak(o.move)).toMatchObject({
+    const gotIt = speak(o.move);
+    expect(gotIt).toMatchObject({ kind: "ack", line: "Got it." });
+    expect(gotIt.then).toMatchObject({
       kind: "question",
       level: "L0",
       conceptId: "c_16",
-      line: "Got it. How many checks for a million items?",
+      line: "How many checks for a million items?",
     });
     s = o.session;
 
     expect(log).toEqual([
       ["open", "L0", "c_12"],
       ["question", "L1", "c_12"],
+      ["ack", "L1", "c_12"],
       ["question", "L0", "c_14"],
       ["question", "L2", "c_14"],
       ["celebrate", "L2", "c_14"],
       ["question", "L0", "c_15"],
       ["question", "L1", "c_15"],
+      ["ack", "L1", "c_15"],
       ["question", "L0", "c_16"],
     ]);
     expect(s.concepts.map((c) => c.state)).toEqual([
@@ -245,7 +255,7 @@ describe("B15 worked example (binary search)", () => {
       judge: { covered: [{ conceptId: "c_16", quote: "About twenty" }] },
     });
     expect(stateOf(o.session, "c_16").state).toBe("owned");
-    expect(speak(o.move)).toMatchObject({ kind: "check_in", sessionState: "wrapping_up" });
+    expect(speak(o.move).then).toMatchObject({ kind: "check_in", sessionState: "wrapping_up" });
     expect(o.session.pending).toBe("wrap_proposal");
     expect(o.session.concepts.map((c) => c.state)).toEqual([
       "assisted",
@@ -254,6 +264,6 @@ describe("B15 worked example (binary search)", () => {
       "assisted",
       "owned",
     ]);
-    expect(spoken).toHaveLength(9);
+    expect(spoken).toHaveLength(12);
   });
 });

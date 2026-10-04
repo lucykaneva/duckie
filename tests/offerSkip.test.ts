@@ -1,7 +1,7 @@
-// When the ladder is used up the duck points at the slide: skipping means "look at it later, we'll come back".
+// When the ladder is used up the duck offers to leave the idea for later. Never a slide.
 import { describe, expect, it } from "vitest";
 import { SEED_CONCEPTS } from "../src/lib/db/seed-data";
-import { ENGINE } from "../src/lib/duck/config";
+import { DUCK, ENGINE } from "../src/lib/duck/config";
 import { emptyJudgeResult } from "../src/lib/engine/stub-judge";
 import { freshSession, processTurn, type ConceptDef, type SessionRun } from "../src/lib/engine/turn";
 import { offerSkipLine, wordCount } from "../src/lib/engine/wording";
@@ -32,7 +32,7 @@ function exhausted(): SessionRun {
 describe("the offer when the student is still stuck", () => {
   it("offers to leave it and come back, without naming a slide", () => {
     const out = turn(exhausted(), "No?");
-    const slide = defs.find((d) => d.id === "c_14")!.slide;
+    const slide = defs.find((d) => d.id === "c_14")?.slide;
     expect(out.move.kind).toBe("offer_skip");
     expect(out.move.line).toBe(offerSkipLine(slide));
     expect(out.move.line).not.toMatch(/slide/i);
@@ -48,6 +48,13 @@ describe("the offer when the student is still stuck", () => {
   it("names the slide only when mentionSlides is on, and the idea has one", () => {
     expect(offerSkipLine(undefined)).not.toMatch(/slide/i);
     expect(offerSkipLine(0)).not.toMatch(/slide/i);
+    DUCK.mentionSlides = true;
+    try {
+      expect(offerSkipLine(7)).toMatch(/slide 7/);
+      expect(offerSkipLine(undefined)).not.toMatch(/slide/i);
+    } finally {
+      DUCK.mentionSlides = false;
+    }
   });
 
   it("moves on, marked as skipped (so it is revisited), only after a plain yes", () => {
@@ -58,7 +65,7 @@ describe("the offer when the student is still stuck", () => {
     const yes = turn(offered.session, "Yes");
     const c = yes.session.concepts.find((x) => x.conceptId === "c_14")!;
     expect(c.skipped).toBe(true);
-    expect(c.state).toBe("skipped"); // recall: due again in 1 day, and it is a candidate for "idea to revisit"
-    expect(yes.move.conceptId).not.toBe("c_14");
+    expect(c.state).toBe("skipped");
+    expect((yes.move.then ?? yes.move).conceptId).not.toBe("c_14");
   });
 });

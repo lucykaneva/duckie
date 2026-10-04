@@ -6,6 +6,9 @@ import {
   COMPLAINT_ABOUT_DUCK,
   EXPLAIN_REQUEST_PATTERNS,
   DONT_KNOW_PATTERNS,
+  FRUSTRATION_PATTERNS,
+  READY_PATTERNS,
+  TIRED_PATTERNS,
   FILLER_WORD,
   HEDGE_PATTERNS,
   HELP_REQUEST_PATTERNS,
@@ -42,10 +45,107 @@ export function countWords(text: string): number {
   return tokenize(text).length;
 }
 
+/** Sentences long enough to be their own claim, with indexes into the original text. */
+export function claimSpans(text: string): { start: number; end: number }[] {
+  const spans: { start: number; end: number }[] = [];
+  for (const match of text.matchAll(/[^.?!]+[.?!]*/g)) {
+    const slice = match[0];
+    if (tokenize(slice).length < ENGINE.laterClaimMinWords) continue;
+    const start = match.index ?? 0;
+    spans.push({ start, end: start + slice.length });
+  }
+  return spans;
+}
+
+/** The turn states one claim, then a later one. The later one is what they actually landed on. */
+export function endsWithLaterClaim(text: string): boolean {
+  return claimSpans(text).length >= 2;
+}
+
+/** The quote sits in a claim after the first one, so it is the ending, not the opening. */
+export function quoteInLaterClaim(text: string, quote: string): boolean {
+  const spans = claimSpans(text);
+  if (spans.length < 2) return false;
+  const at = text.indexOf(quote);
+  return at !== -1 && at >= spans[1].start;
+}
+
 /** "I don't know", "no idea", "not sure at all" and close variants. */
 export function detectDontKnow(text: string): boolean {
   const t = normalize(text);
   return DONT_KNOW_PATTERNS.some((pattern) => pattern.test(t));
+}
+
+/** "Okay, let's do that." Agreement to start, not an answer to a question. */
+export function detectReady(text: string): boolean {
+  const t = normalize(text);
+  return READY_PATTERNS.some((pattern) => pattern.test(t));
+}
+
+/** "I just said that." The duck asked again and they noticed. */
+export function detectFrustration(text: string): boolean {
+  const t = normalize(text);
+  return FRUSTRATION_PATTERNS.some((pattern) => pattern.test(t));
+}
+
+/** "I'm tired." They want to stop the session, not skip the current idea. */
+export function detectTired(text: string): boolean {
+  const t = normalize(text);
+  return TIRED_PATTERNS.some((pattern) => pattern.test(t));
+}
+
+/**
+ * The whole turn is agreement ("okay", "let's do that"), not an answer.
+ * A longer turn, a question, or "I don't know" is the student actually talking.
+ */
+export function isOnlyReady(text: string): boolean {
+  if (!text.trim()) return false;
+  if (
+    detectDontKnow(text) ||
+    detectHelpRequest(text) ||
+    detectQuestion(text) ||
+    detectMoveOn(text) ||
+    detectWrapUpRequest(text) ||
+    detectFrustration(text) ||
+    detectTired(text)
+  ) {
+    return false;
+  }
+  if (tokenize(text).length > ENGINE.readyTurnMaxWords) return false;
+  return detectReady(text) || detectAffirmative(text);
+}
+
+/** The claim with "is fine" stripped, so "lo = mid is fine" is "lo = mid". */
+function claimCore(misconception: string): string {
+  return normalize(misconception)
+    .replace(/\bequals\b/g, "=")
+    .replace(/\s*=\s*/g, " = ")
+    .replace(/\b(?:is|are)\s+(?:fine|okay|ok|alright|all right|wrong|bad)\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** The student named this stored wrong belief ("lo equals mid"). */
+export function mentionsClaim(text: string, misconception: string): boolean {
+  const core = claimCore(misconception);
+  if (core.length < 3) return false;
+  const hay = normalize(text).replace(/\bequals\b/g, "=").replace(/\s*=\s*/g, " = ");
+  return hay.includes(core);
+}
+
+/**
+ * They spotted the failure themselves ("it loops forever"), rather than agreeing the wrong claim is fine.
+ * A bare "no" does not count: "no idea" is being lost, not catching the bug.
+ */
+export function caughtPlantedMistake(text: string): boolean {
+  if (plantedAgreementQuote(text)) return false;
+  const t = normalize(text);
+  return (
+    /\b(?:loops?|forever|infinite)\b/.test(t) ||
+    /\bnever (?:moves?|stops?|ends?)\b/.test(t) ||
+    /\bnot (?:fine|okay|ok|alright)\b/.test(t) ||
+    /\b(?:that(?:'s| is)|it(?:'s| is)) (?:wrong|incorrect)\b/.test(t)
+  );
 }
 
 /** How many hedges ("I think", "maybe", "kind of", "or something") are in the turn. */

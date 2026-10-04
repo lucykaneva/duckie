@@ -24,6 +24,10 @@ describe("I don't know", () => {
     "Not sure at all",
     "I dunno",
     "no clue",
+    "I kinda forgot",
+    "I don't remember",
+    "I don't really remember what it is",
+    "I'm not really sure to be honest",
   ])("fires on %j", (text) => {
     expect(detectDontKnow(text)).toBe(true);
   });

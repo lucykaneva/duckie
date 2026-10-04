@@ -69,10 +69,34 @@ describe("opening move", () => {
   it("opens with the spec's line and every concept Not yet", () => {
     const move = openingMove(defs);
     expect(move.kind).toBe("open");
-    expect(move.line).toBe("Hey. Walk me through this in your words. I'll learn it with you.");
+    expect(move.line).toBe("I don't really get binary search yet. How does it work?");
     expect(move.sessionState).toBe("active");
     expect(move.concepts).toHaveLength(5);
     expect(move.concepts.every((c) => c.state === "not_yet" && c.score === 0)).toBe(true);
+  });
+
+  it("does not repeat the opening when they only said hello", () => {
+    const o = run(freshSession(defs), "Hello?");
+    expect(o.move.kind).toBe("open");
+    expect(o.move.line).not.toBe(openingMove(defs).line);
+    expect(o.move.line).not.toMatch(/walk me through/i);
+  });
+
+  it("starts one small curious question when they say they forgot", () => {
+    const o = run(freshSession(defs), "Hm, I'm not really sure to be honest, I kinda forgot.");
+    expect(o.move.kind).toBe("question");
+    expect(o.move.level).toBe("L1");
+    expect(o.move.conceptId).toBe("c_12");
+    expect(o.move.line).toBe("So I could use it on my pebbles? They're all mixed up.");
+    expect(o.signals).toEqual([]);
+  });
+
+  it("names the topic when they ask through what, and does not repeat the opening", () => {
+    const o = run(freshSession(defs), "Hello, through what?");
+    expect(o.move.kind).toBe("open");
+    expect(o.move.line).toMatch(/binary search/i);
+    expect(o.move.line).not.toBe(openingMove(defs).line);
+    expect(o.move.line).not.toMatch(/walk me through|just a duck/i);
   });
 });
 
@@ -103,10 +127,13 @@ describe("worked example (binary search)", () => {
     });
     expect(stateOf(o, "c_12")).toMatchObject({ state: "assisted", score: 0, levelReached: "L1" });
     expect(o.resolved[0].previous).toBeLessThan(DUCK.earnedScore); // not earned
-    expect(o.move).toMatchObject({ kind: "question", level: "L0", conceptId: "c_14" });
-    expect(o.move.line).toBe(
-      "Got it. Test me: 1, 3, 5, 7, 9, looking for 6. Which numbers do you check?",
-    );
+    expect(o.move).toMatchObject({ kind: "ack", line: "Got it.", conceptId: "c_12" });
+    expect(o.move.then).toMatchObject({
+      kind: "question",
+      level: "L0",
+      conceptId: "c_14",
+      line: "Test me: 1, 3, 5, 7, 9, looking for 6. Which numbers do you check?",
+    });
     lines.push(o.move.line);
     s = o.session;
 
@@ -117,7 +144,7 @@ describe("worked example (binary search)", () => {
     expect(o.signals).toEqual(["wrongTrace", "hedging"]);
     expect(stateOf(o, "c_14").score).toBe(0.45);
     expect(o.move).toMatchObject({ kind: "question", level: "L2", conceptId: "c_14" });
-    expect(o.move.line).toBe("Slide 7 shows when it stops. What has to be true to stop?");
+    expect(o.move.line).toBe("What has to be true before you stop looking?");
     lines.push(o.move.line);
     s = o.session;
 
@@ -129,7 +156,7 @@ describe("worked example (binary search)", () => {
     expect(o.resolved[0].previous).toBeGreaterThanOrEqual(DUCK.earnedScore); // earned
     // Earned, so the duck celebrates; 1.5 s later it moves on to the update step (spec turns 5 and 6).
     expect(o.move).toMatchObject({ kind: "celebrate", conceptId: "c_14" });
-    expect(o.move.line).toBe("Ooh, nice. You got when it stops.");
+    expect(o.move.line).toBe("Mm. You just got when it stops.");
     expect(o.move.then).toMatchObject({ kind: "question", level: "L0", conceptId: "c_15" });
     expect(o.move.then!.line).toBe("My friend wrote lo = mid, not mid + 1. Is that okay?");
     lines.push(o.move.line, o.move.then!.line);
@@ -151,8 +178,12 @@ describe("worked example (binary search)", () => {
     });
     expect(stateOf(o, "c_15")).toMatchObject({ state: "assisted", score: 0 });
     expect(o.resolved[0].previous).toBeLessThan(DUCK.earnedScore);
-    expect(o.move).toMatchObject({ level: "L0", conceptId: "c_16" });
-    expect(o.move.line).toBe("Got it. How many checks for a million items?");
+    expect(o.move).toMatchObject({ kind: "ack", line: "Got it." });
+    expect(o.move.then).toMatchObject({
+      level: "L0",
+      conceptId: "c_16",
+      line: "How many checks for a million items?",
+    });
     lines.push(o.move.line);
     s = o.session;
 
@@ -161,7 +192,7 @@ describe("worked example (binary search)", () => {
       judge: { covered: [{ conceptId: "c_16", quote: "About twenty" }] },
     });
     expect(stateOf(o, "c_16").state).toBe("owned");
-    expect(o.move).toMatchObject({ kind: "check_in", sessionState: "wrapping_up" });
+    expect(o.move.then).toMatchObject({ kind: "check_in", sessionState: "wrapping_up" });
     expect(o.session.pending).toBe("wrap_proposal");
     lines.push(o.move.line);
 
@@ -307,6 +338,7 @@ describe("the ladder in a session", () => {
     expect(seen[4].line).toBe(line("c_12", "L4"));
     expect(seen[5].line).toBe(offerSkipLine(defs.find((d) => d.id === seen[5].conceptId)?.slide));
     expect(seen[5].line).toMatch(/come back/);
+    expect(seen[5].line).not.toMatch(/slide/i);
     expect(stateOf(o, "c_12")).toMatchObject({ levelReached: "L4", failedAttempts: 5 });
   });
 
@@ -329,7 +361,8 @@ describe("the ladder in a session", () => {
       judge: { covered: [{ conceptId: "c_12", quote: "only works sorted" }] },
     });
     expect(stateOf(o, "c_12").state).toBe("explained_to");
-    expect(o.move.line.startsWith("Okay, that makes sense now. ")).toBe(true);
+    expect(o.move).toMatchObject({ kind: "ack", line: "Okay, that makes sense now." });
+    expect(o.move.then?.kind).toBe("question");
   });
 
   it("reads the move cap from the config", () => {
@@ -343,8 +376,8 @@ describe("move on", () => {
   it("skips the concept the duck asked about and never raises it again", () => {
     let o = run(sessionAt("c_14"), "Let's move on");
     expect(stateOf(o, "c_14")).toMatchObject({ state: "skipped", skipped: true });
-    expect(o.move.conceptId).toBe("c_12");
-    expect(o.move.line.startsWith("Okay. ")).toBe(true);
+    expect(o.move).toMatchObject({ kind: "ack", line: "Okay." });
+    expect(o.move.then?.conceptId).toBe("c_12");
     for (let i = 0; i < 6; i++) {
       o = run(o.session, "hmm");
       expect(o.move.conceptId === "c_14" && o.move.kind !== "wrap_up").toBe(false);

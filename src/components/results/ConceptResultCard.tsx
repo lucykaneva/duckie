@@ -49,7 +49,7 @@ export const STATE_DOT: Record<ConceptState, string> = {
 const HELP_LEVEL: Record<Level, string> = {
   L0: "No help",
   L1: "duckie asked a question",
-  L2: "duckie pointed to slide",
+  L2: "duckie nudged the idea",
   L3: "duckie gave smaller example",
   L4: "duckie explained",
 };

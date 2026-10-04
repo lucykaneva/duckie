@@ -158,20 +158,20 @@ export function pickRevise(concepts: ConceptRun[]): ConceptRun | undefined {
 export function strongestMomentLine(name: string, celebrationLine?: string | null): string {
   const spoken = celebrationLine?.trim();
   if (spoken && wordCount(spoken) <= DUCK.maxDuckWords) return spoken.replace(/[.!?]+$/, ".");
-  return `You found ${inSentence(name)}.`;
+  return `Your best bit was ${inSentence(name)}.`;
 }
 
-/** Safe 20-word wrap-up if Grok is down. */
+/** Safe 20-word wrap-up if Grok is down. No scores. */
 export function wrapSummaryLine(strongest: string, revise: string | undefined): string {
   const found = strongest.replace(/[.!?]+$/, ".");
   if (!revise) {
     const clear = `${found} That's everything.`;
     return wordCount(clear) <= DUCK.maxDuckWords ? clear : found;
   }
-  const full = `${found} Revisit ${inSentence(revise)}.`;
+  const full = `${found} Next time we can try ${inSentence(revise)}.`;
   if (wordCount(full) <= DUCK.maxDuckWords) return full;
-  const short = `Revisit ${inSentence(revise)}.`;
-  return wordCount(short) <= DUCK.maxDuckWords ? short : "Let's look at the hard part again next time.";
+  const short = `Next time we can try ${inSentence(revise)}.`;
+  return wordCount(short) <= DUCK.maxDuckWords ? short : "We can try the hard part again next time.";
 }
 
 function quotesFor(conceptId: string, quotes: QuoteForConcept[]): string[] {

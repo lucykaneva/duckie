@@ -45,23 +45,25 @@ const clean = (value: unknown, max: number): string => {
 
 const questionMarks = (line: string): number => (line.match(/\?/g) ?? []).length;
 const squash = (text: string): string => text.toLowerCase().replace(/\s+/g, "");
+const SCREEN =
+  /\bslide\s*\d+\b|\bpage\s*\d+\b|\blook at (?:the )?(?:slide|page|screen|notes)\b|\bscroll (?:up|down)\b|\bwrite this down\b/i;
 
 /** Why a spoken line is not acceptable, or null if it is fine. */
 export function lineProblem(
   line: string,
   limit: number,
-  options: { mustEndWithQuestion?: boolean; mustMentionSlide?: number; answer?: string } = {},
+  options: { mustEndWithQuestion?: boolean; allowNoQuestion?: boolean; answer?: string } = {},
 ): string | null {
   if (!line) return "empty";
   if (wordCount(line) > limit) return `over ${limit} words`;
-  if (questionMarks(line) !== 1) return "needs exactly one question";
-  if (options.mustEndWithQuestion && !line.endsWith("?")) return "must end with the question";
-  if (options.mustMentionSlide !== undefined) {
-    const match = line.match(/slide\s*(\d+)/i);
-    if (!match || Number(match[1]) !== options.mustMentionSlide) {
-      return `must name slide ${options.mustMentionSlide}`;
-    }
+  const questions = questionMarks(line);
+  if (options.allowNoQuestion) {
+    if (questions > 1) return "more than one question";
+  } else if (questions !== 1) {
+    return "needs exactly one question";
   }
+  if (options.mustEndWithQuestion && !line.endsWith("?")) return "must end with the question";
+  if (SCREEN.test(line)) return "mentions a slide or page";
   if (options.answer && options.answer.length >= 3 && squash(line).includes(squash(options.answer))) {
     return "states the answer";
   }
@@ -161,8 +163,8 @@ export function validateExtraction(
       L4: clean(q.L4, 400),
     };
     const lineProblems = [
-      ["L1", lineProblem(lines.L1, limits.maxDuckWords, { answer })],
-      ["L2", lineProblem(lines.L2, limits.maxDuckWords, { mustMentionSlide: slide, answer })],
+      ["L1", lineProblem(lines.L1, limits.maxDuckWords, { allowNoQuestion: true, answer })],
+      ["L2", lineProblem(lines.L2, limits.maxDuckWords, { allowNoQuestion: true, answer })],
       ["L3", lineProblem(lines.L3, limits.maxDuckWords, { answer })],
       ["L4", lineProblem(lines.L4, limits.maxDuckWords, { mustEndWithQuestion: true, answer })],
     ].filter((entry): entry is [string, string] => entry[1] !== null);

@@ -96,7 +96,7 @@ The score picks how much help the duck gives, from a curious question up to a sh
 | --- | --- | --- | --- |
 | L0 Listen | Score under 0.25 | No comment on the concept; move to the next one | (moves on) |
 | L1 Curious question | 0.25 to 0.45 | A naive question that tests the gap without naming it | "So I could use it on my pebbles? They're all mixed up." |
-| L2 Point to the source | 0.45 to 0.6 | Names the slide, not the answer | "Slide 4 says something about order. What does it say?" |
+| L2 Nudge the idea | 0.45 to 0.6 | A gentle nudge about the idea, never a slide | "Hmm, does the order of the things matter?" |
 | L3 Smaller case | 0.6 to 0.8, or the student asks for help | A tiny example with different values | "Try it with just 2, 5, 9, looking for 9." |
 | L4 Explain, then teach back | 0.8 or more, or 3 failed attempts | Explains in 2 sentences or fewer, then asks the student to restate it | "It only works on sorted lists, because… Can you say why in your words?" |
 
@@ -116,7 +116,7 @@ The score picks how much help the duck gives, from a curious question up to a sh
 - **A request for help goes to L3 from below it,** and does not count as a failed attempt. Asking again at L3 or higher just continues the ladder.
 - **Misconceptions never sit at L0.** A misconception raises the floor to L1, whatever the score.
 - **The 3-move cap counts every duck move on the concept,** including the first check question (L0). **L4 is exempt from the cap:** a student who got to L4 has not yet been explained to, so the duck gives the explanation and teach-back question first, and offers to skip only after that.
-- **The duck never moves on by itself.** After the ladder is used up it says "Want to skip this one?" and waits. It moves on only if the student then says a plain yes (yes, yeah, okay, sure, go ahead), or says they want to move on at any time. Anything else, including "I don't know", keeps the offer open.
+- **The duck never moves on by itself.** After the ladder is used up it says "Want to leave this one for later?" and waits. It moves on only if the student then says a plain yes (yes, yeah, okay, sure, go ahead), or says they want to move on at any time. Anything else, including "I don't know", keeps the offer open.
 - **Resolved wins over struggling.** If the student answers correctly in the same turn that also contains hedging or fillers, the concept is resolved and the score resets to 0. The state is Owned if the concept was never helped, Assisted after L1 to L3, Explained to after L4. Whether the struggle was earned (score reached `earnedScore` before the success) is recorded for the debrief.
 - **Every concept in the section is scored on every turn,** not only the one being asked about. A student who covers a later concept while answering an earlier one gets it recognised (Owned) and is not asked about it again.
 - **L4 with the AI down:** each concept stores a short explanation plus teach-back question in `fallback_questions.L4`, written at extraction and by hand in the demo seed. The duck is never left without an L4 line.
@@ -129,10 +129,10 @@ The brakes keep the duck from turning into an interrogation. They override every
 | Brake | Rule |
 | --- | --- |
 | Move on | "Let's move on" or "skip": concept becomes Skipped, is not raised again this session, and is scheduled for recall |
-| Two skips | After 2 skips in one session, the duck asks once: "Keep going or wrap up?" |
+| Two skips | After 2 skips in one session, the duck asks once: "Want to keep going, or stop here?" |
 | Question streak | After 2 back-to-back duck questions, the next move is an open prompt: "What's the next piece of it?" |
-| Silence, 8 s | Rephrase the question once, at the same level |
-| Silence, 20 s | "Want to skip this one?" |
+| Silence, first | A soft check: "Take your time." Not another question. |
+| Silence, 20 s | "Want to leave this one for later?" |
 | Silence, 45 s | Pause the session: "I'll be here when you're ready." |
 | Session length | At 8 minutes or 6 concepts, the duck proposes wrapping up; it never extends unasked |
 | AI unavailable | Use precomputed questions from the slide analysis; never improvise answers |
@@ -178,7 +178,7 @@ Praise is rare and specific, so it means something. It follows Burrow's rule: ce
 
 - **"Caught a misconception or bug on their own" means the planted mistake, answered with no help.** A concept can carry a flag, `plants_misconception`, set when its opening question states a wrong claim ("My friend wrote `lo = mid`. Is that okay?"). If the student gets that right at L0 it is a real celebration even though there was no struggle. After any help it is only "Got it". Extraction sets the flag; the demo seed sets it on the update step.
 - **A celebration is its own move, and the next question follows 1.5 s later as a second move.** `/turn` returns the celebration with the follow-up in `then`. Dev A speaks the celebration, waits for the audio to end plus `DUCK.afterCelebrationMs`, then speaks `then.line`. The server has already counted the follow-up as asked.
-- **The line names the concept** ("Ooh, nice. You got when it stops.") until Dev A's `wordMove` writes a specific one ("Ooh, you caught the infinite loop"). A concept name too long to fit in 20 words falls back to "Ooh, nice. You got that one."
+- **The line names the concept** ("Mm. You just got when it stops.") until Dev A's `wordMove` writes a specific one. A concept name too long to fit in 20 words falls back to "Mm. You just explained it yourself."
 - **After L4, the answer is always neutral,** even if the score had climbed far past 0.45.
 
 **How the code checks answers and runs the leak check** (added by Dev B in B10; settled). Covered by `tests/answers.test.ts` and `tests/run-code.test.ts`.
@@ -325,11 +325,11 @@ The trace question uses the list 1, 3, 5, 7, 9 and target 6, with `mid = (lo + h
 
 | Turn | Jordan says | Signals and score | Level | Duck says |
 | --- | --- | --- | --- | --- |
-| 1 | "I want to talk about binary search." | Session opens | — | "Ooh! Can you explain it to me? I'm just a duck." |
+| 1 | "I want to talk about binary search." | Session opens | — | "I don't really get binary search yet. How does it work?" |
 | 2 | "You look at the middle. If the target's bigger you go right, otherwise left. You keep halving." | Halving: Owned. Sorted input: missed, 0.3 | L1 | "So I could use it on my pebbles? They're all mixed up." |
 | 3 | "No, they have to be sorted, or you could throw away the half with the target." | Sorted input: Assisted, score reset. Not earned (0.3) | — | "Got it. Test me: 1, 3, 5, 7, 9, looking for 6. Which numbers do you check?" |
-| 4 | "Um, I think 5, then 7, then maybe 9?" | Wrong trace 0.3 + hedging 0.15 = 0.45 (one "um" in 9 words is not more than 1 per 8, so fillers do not fire) | L2 | "Slide 7 shows when it stops. What has to be true to stop?" |
-| 5 | "When there's nothing left to search. After 7 there's nothing left, so just 5 and 7." | Correct. When it stops: Assisted, earned (0.45) | — | "Ooh, nice. You found where it stops." |
+| 4 | "Um, I think 5, then 7, then maybe 9?" | Wrong trace 0.3 + hedging 0.15 = 0.45 (one "um" in 9 words is not more than 1 per 8, so fillers do not fire) | L2 | "What has to be true before you stop looking?" |
+| 5 | "When there's nothing left to search. After 7 there's nothing left, so just 5 and 7." | Correct. When it stops: Assisted, earned (0.45) | — | "Mm. You just got when it stops." |
 | 6 | (duck moves on after 1.5 s) | Next concept: update step | — | "My friend wrote lo = mid, not mid + 1. Is that okay?" |
 | 7 | "I think that's fine?" | Misconception 0.3 | L1 | "What happens to lo when it's right next to hi?" |
 | 8 | "It stays the same… so it loops forever." | Update step: Assisted. Not earned (0.3) | — | "Got it." |

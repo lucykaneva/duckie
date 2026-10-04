@@ -75,7 +75,7 @@ export function mockTransport(options: { turnDelayMs?: number; failTurns?: numbe
         sessionId: "mock",
         topic: input.topic,
         confidence: input.confidence,
-        move: move("open", "Hey. Walk me through this in your words. I'll learn it with you."),
+        move: move("open", "I don't really get binary search yet. How does it work?"),
       };
     },
     async sendTurn() {
@@ -88,22 +88,22 @@ export function mockTransport(options: { turnDelayMs?: number; failTurns?: numbe
       turns++;
       if (turns === 3) {
         return {
-          ...move("celebrate", "Ooh, nice. You found where it stops."),
+          ...move("celebrate", "Mm. You just got when it stops."),
           then: move("question", "Next one: how many checks for a million items?"),
         };
       }
       if (turns >= 4) return move("wrap_up", "That's about all I can take. Want to wrap up?");
       return turns % 2 === 1
         ? move("question", "So I could use it on my pebbles? They're all mixed up.")
-        : move("question", "What has to be true for that to work?");
+        : move("question", "Hmm, does the order of the things matter?");
     },
     async sendSilence(_id, ms) {
       if (ms >= 45_000) return move("pause", "I'll be here when you're ready.", "paused");
-      if (ms >= 20_000) return move("offer_skip", "Want to skip this one?");
-      return move("rephrase", "So I could use it on my pebbles? They're all mixed up.");
+      if (ms >= 20_000) return move("offer_skip", "Want to leave this one for later?");
+      return move("wait", "Take your time.");
     },
     async endSession() {
-      return move("wrap_up", "You found where it stops. Revisit the update step.", "wrapping_up");
+      return move("wrap_up", "Your best bit was when it stops. Next time we can try the update step.", "wrapping_up");
     },
   };
 }

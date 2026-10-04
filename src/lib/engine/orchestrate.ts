@@ -19,13 +19,17 @@ import {
   detectExplainRequest,
   detectHelpRequest,
   detectQuestion,
+  detectTired,
   detectWrapUpRequest,
+  isOnlyReady,
+  mentionsClaim,
   plantedAgreementQuote,
   tokenize,
 } from "./signals";
 import { emptyJudgeResult } from "./stub-judge";
 import { hasNotStartedTeaching, processTurn, taughtThisTurn } from "./turn";
 import type { ConceptDef, SessionRun, TurnOutcome } from "./turn";
+import { pebbleFree } from "./wording";
 
 // B11: one student turn, start to finish, without touching the database.
 //
@@ -71,6 +75,8 @@ export interface TurnArgs {
   /** Stored answers of the section's trace and prediction concepts. Server only. */
   answers: StoredAnswer[];
   text: string;
+  /** Recent duck and student lines, oldest first. Wording and judging only. Never a stored answer. */
+  conversation?: string;
   /** When the turn finished, epoch ms. */
   nowMs: number;
   /** The student's tone hint from their profile (B13). Wording only. */
@@ -93,7 +99,8 @@ const isOpen = (c: SessionRun["concepts"][number]): boolean =>
  */
 export function needsJudge(run: SessionRun, text: string): boolean {
   if (!text.trim() || run.closing) return false;
-  if (detectWrapUpRequest(text) || detectMoveOn(text)) return false;
+  if (detectWrapUpRequest(text) || detectMoveOn(text) || detectTired(text)) return false;
+  if (isOnlyReady(text) && run.pending === null && run.lastMoveKind !== "offer_skip") return false;
   const short = tokenize(text).length <= ENGINE.shortTurnMaxWords;
   if (run.pending !== null && (short || detectKeepGoing(text) || detectAffirmative(text))) return false;
   if (run.lastMoveKind === "offer_skip" && detectAffirmative(text)) return false;
@@ -149,14 +156,20 @@ function finishJudge(result: JudgeResult, args: TurnArgs): JudgeResult {
 }
 
 function withPlantedAgreement(result: JudgeResult, args: TurnArgs): JudgeResult {
-  const focusId = args.run.focusConceptId;
-  const def = focusId ? args.defs.find((d) => d.id === focusId) : undefined;
-  if (!def?.plantsMisconception) return result;
-  if (result.misconceptions.some((m) => m.conceptId === def.id)) return result;
-  if (result.covered.some((c) => c.conceptId === def.id)) return result;
   const quote = plantedAgreementQuote(args.text);
   if (!quote) return result;
-  return { ...result, misconceptions: [...result.misconceptions, { conceptId: def.id, quote }] };
+  let next = result;
+  for (const def of args.defs) {
+    const open = args.run.concepts.find((c) => c.conceptId === def.id);
+    if (!open || !isOpen(open)) continue;
+    if (next.misconceptions.some((m) => m.conceptId === def.id)) continue;
+    if (next.covered.some((c) => c.conceptId === def.id)) continue;
+    const mentioned = def.misconceptions.some((m) => mentionsClaim(args.text, m));
+    const isFocus = def.id === args.run.focusConceptId && def.plantsMisconception === true;
+    if (!mentioned && !isFocus) continue;
+    next = { ...next, misconceptions: [...next.misconceptions, { conceptId: def.id, quote }] };
+  }
+  return next;
 }
 
 /**
@@ -204,12 +217,16 @@ async function runJudge(
       concepts,
       // Missed is applied after we know they taught, not on a hello.
       explanationTurnEnded: false,
+      ...(args.conversation?.trim() ? { conversation: args.conversation } : {}),
       ...(focusDef
         ? {
             duckAsked: {
               conceptId: focusDef.id,
               line: args.run.lastLine,
               plantsMisconception: focusDef.plantsMisconception === true,
+              ...(focusDef.checkPrompt && /\d(?:\D+\d){2,}/.test(focusDef.checkPrompt)
+                ? { listInQuestion: focusDef.checkPrompt }
+                : {}),
             },
           }
         : {}),
@@ -245,9 +262,9 @@ function conversationSituation(
   const missed = [...new Set(judge.missed.map((c) => nameOf(c.conceptId)))];
   const open = run.concepts.filter(isOpen).map((c) => nameOf(c.conceptId));
   return [
-    `You are a plush duck. The student is teaching you ${topic} out loud. Continue this conversation. Reply to what they just said.`,
+    `You are a kind, curious duck a step behind on purpose. The student is teaching you ${topic} out loud. There is no screen. The course name is only background. Follow the words they just said, even when they are about a different piece. Ask one natural question that moves on from those words. Do not ask the same question again.`,
     covered.length ? `They just made sense of: ${covered.join(", ")}.` : "They have not explained a concept yet.",
-    missed.length ? `They have not yet explained: ${missed.join(", ")}.` : "",
+    missed.length ? `Something may be missing: ${missed.join(", ")}. Point at the gap without naming it.` : "",
     open.length ? `Ideas still open: ${open.join(", ")}.` : "",
   ]
     .filter(Boolean)
@@ -262,6 +279,7 @@ async function wordAndGuard(
     committed: string[];
     studentWords: string;
     toneHint?: string;
+    conversation?: string;
     run: SessionRun;
     judge: JudgeResult;
     /** The signals code applied to the concept in focus this turn. */
@@ -286,20 +304,25 @@ async function wordAndGuard(
         : undefined;
 
   const wordLine = async (m: DuckMove): Promise<string> => {
-    if (!isWorded({ ...m, studentAsked: asked })) return m.line;
     const def = context.defs.find((d) => d.id === m.conceptId);
+    const safeLine = pebbleFree(m.line, def?.name);
+    if (!isWorded({ ...m, studentAsked: asked })) return safeLine;
     const result = await deps.word({
       kind: m.kind,
       level: m.level,
       conceptName: def?.name ?? "this idea",
       topic: context.defs[0]?.topic,
-      slide: def && def.slide > 0 ? def.slide : undefined,
       studentWords: context.studentWords,
       toneHint: context.toneHint,
-      fallbackLine: m.line,
+      fallbackLine: safeLine,
       situation: conversationSituation(context.defs, context.run, context.judge),
       lastDuckLine: context.run.lastLine,
-      ...(wasWrong && (m.kind === "question" || m.kind === "rephrase") ? { studentWas: "wrong" as const } : {}),
+      ...(context.conversation?.trim() ? { conversation: context.conversation } : {}),
+      ...(wasWrong && (m.kind === "question" || m.kind === "rephrase" || m.kind === "open")
+        ? { studentWas: "wrong" as const }
+        : {}),
+      ...(context.signals.includes("dontKnow") && !wasWrong ? { studentLost: true } : {}),
+      ...(isOnlyReady(context.studentWords) && context.signals.length === 0 ? { studentHeld: "agreed" as const } : {}),
       // Before they have taught anything, "can you explain?" is about the duck's own words: explain them.
       ...(asked && m.kind !== "celebrate" ? { studentAsked: m.kind === "open" ? ("clarify" as const) : asked } : {}),
     });
@@ -347,6 +370,7 @@ export async function orchestrateTurn(
       committed: raw.session.committed,
       studentWords: args.text,
       toneHint: args.toneHint,
+      conversation: args.conversation,
       run: args.run,
       judge: judged.result,
       signals: raw.signals,
@@ -385,9 +409,8 @@ export interface OrchestratedSilence {
 }
 
 /**
- * A silence timer. The 8 s rephrase is reworded like any help question (the student said nothing, so
- * there are no words to reuse); the offer, pause and check-in repeats are fixed lines. Returns null when
- * there is nothing to do.
+ * A silence timer. The first step is a soft wait (take your time), then an offer to skip, then a pause.
+ * Returns null when there is nothing to do.
  */
 export async function orchestrateSilence(
   args: SilenceArgs,

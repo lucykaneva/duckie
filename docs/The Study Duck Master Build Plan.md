@@ -66,7 +66,7 @@ Fair-evidence rules: a judge signal without an exact quote does not count. Each 
 | --- | --- | --- |
 | L0 Listen | Under 0.25 | Says nothing about the concept and moves on |
 | L1 Curious question | 0.25 to 0.45 (misconceptions start here) | A naive question that tests the gap without naming it |
-| L2 Point to the source | 0.45 to 0.6 | Names the slide, not the answer |
+| L2 Nudge the idea | 0.45 to 0.6 | A gentle nudge about the idea, never a slide |
 | L3 Smaller case | 0.6 to 0.8, or the student asks for help | A tiny example with different values |
 | L4 Explain, then teach back | 0.8 or more, or 3 failed attempts | Explains in 2 sentences or fewer, then asks the student to restate it |
 
@@ -255,7 +255,7 @@ The filler line ("Hmm, let me think") is the duck page's job: if `/turn` has not
 | --- | --- | --- |
 | `question`, `rephrase`, `open` | A question, the same question again, or "What's the next piece of it?" | Speak it and arm the silence timers |
 | `celebrate` | Praise for a concept. Has `then`, the next move | Speak `line`, wait until the audio ends plus 1.5 s (`DUCK.afterCelebrationMs`), then speak `then.line` and arm the silence timers after that. If the student starts talking in the gap, drop `then` and treat what they say as their next turn |
-| `offer_skip` | "Want to skip this one?" | Speak it. A plain "yes" from the student skips the concept |
+| `offer_skip` | "Want to leave this one for later?" | Speak it. A plain "yes" from the student skips the concept |
 | `check_in` | A question the student answers yes, no or in a few words: "Keep going or wrap up?", or a proposal to wrap up (`sessionState: "wrapping_up"`) | Speak it and keep the session open. Do not finish. Send the reply to `/turn` like any other turn |
 | `wrap_up` | The student agreed to stop. The line is "Okay, let's wrap up." | Speak it, then call `POST /end`, which returns the closing summary to speak. Then finish. Repeated `/turn` calls keep returning `wrap_up` |
 | `pause` | 45 s of silence. `sessionState` is `paused` | Speak it, stop the timers, wait for the student. Their next turn resumes the session |
@@ -269,7 +269,7 @@ The filler line ("Hmm, let me think") is the duck page's job: if `/turn` has not
   "confidence": 5,
   "understanding": 30,
   "illusionScore": 70,
-  "strongestMoment": "You found where it stops.",
+  "strongestMoment": "Your best bit was when it stops.",
   "reviseNext": "The update step",
   "concepts": [
     {"id": "c_12", "name": "Sorted input", "state": "assisted", "levelReached": "L1", "slide": 4, "quotes": ["No, they have to be sorted"]}
@@ -415,7 +415,7 @@ Errors are `{error, code}` with a message that is safe to show: empty file, unsu
 Judgment calls (these decide what can break, so they are fixed here):
 
 - **One file per section.** A new upload replaces the section's concepts, but only when the new extraction succeeds, so a failed re-upload keeps the old ones. It is refused with a clear message once any session has used the section, because concept ids are saved in session history. "Slide 4" is then always unambiguous.
-- **Everything the AI returns is checked in code before it is saved.** A concept is dropped if its slide is not a page of the file; its check question is over 15 words; any line is over 20 words or has more than one question; L2 does not name its own slide; L4 does not end with a question; or any line contains the stored answer; or a trace or prediction question's check question gives no input values (a student cannot answer one without the numbers, so matrix-heavy slides may produce fewer trace questions). When concepts are dropped, Grok is asked once to correct just those, and the good ones are kept. The number of concepts therefore varies a little between runs.
+- **Everything the AI returns is checked in code before it is saved.** A concept is dropped if its slide is not a page of the file; its check question is over 15 words; any line is over 20 words or has more than one question; any spoken line mentions a slide or page; L4 does not end with a question; or any line contains the stored answer; or a trace or prediction question's check question gives no input values (a student cannot answer one without the numbers, so matrix-heavy slides may produce fewer trace questions). When concepts are dropped, Grok is asked once to correct just those, and the good ones are kept. The number of concepts therefore varies a little between runs.
 - **The expected answer from Grok is provisional.** The answer must come from running code, never from the AI. B8 stores Grok's reference code and its stated answer. B10 must run the code, use that result as the real expected answer, and turn the question into a plain explain question if they disagree. Compare answers as parsed values, not text: Grok writes `[3, 2]` and the code returns `[3,2]`.
 - **Page images and scans are not kept.** Only the text of each page is stored (`document_pages`, and joined in `documents.raw_text`).
 - **Uploaded text is treated as material, never as instructions.** The prompt says so, and every output is validated, so a slide that says "ignore your instructions" cannot change the output format or add an answer.

@@ -1,7 +1,7 @@
 import { runSilence } from "@/lib/db/sessions";
 
 // Dev A's silence timers call this at 8, 20 and 45 s after the duck's last line (spec section 5).
-// 8 s rephrases, 20 s offers to skip, 45 s pauses. A call that has nothing to do returns 409.
+// Soft wait, then offer to skip, then pause. A call that has nothing to do returns 409.
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },

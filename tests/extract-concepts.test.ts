@@ -83,8 +83,7 @@ describe("validating Grok's concept list", () => {
     for (const slide of [0, 11, 2.5, "4", null]) {
       expect(validateExtraction({ concepts: [good({ slide })] }, 10).concepts).toEqual([]);
     }
-    // The L2 line names slide 4, so it also has to match the slide tag.
-    expect(validateExtraction({ concepts: [good({ slide: 5 })] }, 10).concepts).toEqual([]);
+    expect(validateExtraction({ concepts: [good({ slide: 5 })] }, 10).concepts).toHaveLength(1);
   });
 
   it("drops a concept with an over-long, multi-question or empty line", () => {
@@ -93,7 +92,7 @@ describe("validating Grok's concept list", () => {
     for (const bad of [
       { ...lines, L1: long },
       { ...lines, L3: "Is this one? Or is it two?" },
-      { ...lines, L2: "Slide 4 says something about order." },
+      { ...lines, L2: "What does slide 4 say about order?" },
       { ...lines, L4: "It only works on sorted lists. Say why" },
       { ...lines, L1: "" },
       { ...lines, L4: undefined },
@@ -158,12 +157,11 @@ describe("validating Grok's concept list", () => {
   });
 
   it("drops duplicates, caps misconceptions, and sorts by slide", () => {
-    const a = good({ name: "A", slide: 3, fallbackQuestions: { ...seed.fallbackQuestions, L2: "Slide 3 says something. What?" } });
+    const a = good({ name: "A", slide: 3 });
     const b = good({
       name: "B",
       slide: 1,
       misconceptions: ["one", "two", "three", "four", "", 5],
-      fallbackQuestions: { ...seed.fallbackQuestions, L2: "Slide 1 says something. What?" },
     });
     const { concepts } = validateExtraction({ concepts: [a, a, b] }, 10);
     expect(concepts.map((c) => c.name)).toEqual(["B", "A"]);
@@ -296,13 +294,12 @@ describe("extracting concepts from pages", () => {
     { num: 1, text: "Binary search finds a value by halving a sorted list." },
     { num: 4, text: "Binary search only works on sorted input. Sorting lets us discard half." },
   ];
-  /** Three valid concepts that all point at one slide (the L2 line must name that slide). */
+  /** Three valid concepts that all sit on one page. */
   const threeAt = (slide: number) =>
     ["One", "Two", "Three"].map((name) =>
       good({
         name,
         slide,
-        fallbackQuestions: { ...seed.fallbackQuestions, L2: `Slide ${slide} says something about order. What does it say?` },
       }),
     );
   const three = threeAt(4);
@@ -394,7 +391,6 @@ describe("repairing rejected concepts", () => {
     good({
       name,
       slide: 4,
-      fallbackQuestions: { ...seed.fallbackQuestions, L2: "Slide 4 says something about order. What does it say?" },
       ...over,
     });
   const tooLong = "Count every single word in this very long check question that goes on and on forever?";
@@ -475,7 +471,6 @@ describe("trace questions must give their inputs", () => {
       good({
         name,
         slide: 4,
-        fallbackQuestions: { ...seed.fallbackQuestions, L2: "Slide 4 says something about order. What does it say?" },
         ...over,
       });
     const first = {

@@ -287,6 +287,67 @@ export function compareAnswer(text: string, expectedJson: string): Verdict {
   return saidYes === expected.value ? "correct" : "wrong";
 }
 
+const SMALL_NUMBERS = [
+  "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+  "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty",
+];
+
+function sayNumber(n: number): string {
+  if (Number.isInteger(n) && n >= 0 && n < SMALL_NUMBERS.length) return SMALL_NUMBERS[n];
+  return String(n);
+}
+
+function capWord(word: string): string {
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+/** The list in a check prompt, like 1, 3, 5, 7, 9. The target ("looking for 6") is a separate number. */
+function exampleList(checkPrompt: string): number[] | undefined {
+  const runs = numberRuns(checkPrompt).filter((run) => run.length >= 3);
+  if (runs.length === 0) return undefined;
+  return [...runs].sort((a, b) => b.length - a.length)[0];
+}
+
+/**
+ * The number they treated as the middle, spoken as a word ("three"), when it is in the list
+ * and is not the middle. Null when they already named the middle, or there is no list.
+ * This is not the stored answer. It only reads the list the duck already asked out loud.
+ */
+export function spokenMissWord(checkPrompt: string, studentText: string): string | null {
+  const list = exampleList(checkPrompt);
+  if (!list || list.length % 2 === 0) return null;
+  const middle = list[Math.floor(list.length / 2)];
+  const said = numbersIn(stripAbsentNumbers(studentText)).filter((n) => list.some((v) => same(v, n)));
+  if (said.length === 0 || said.some((n) => same(n, middle))) return null;
+  return sayNumber(said[0]);
+}
+
+/** They named the middle of the spoken list and nothing else. That is not a full trace. */
+export function namesOnlyMiddle(checkPrompt: string, studentText: string): boolean {
+  const list = exampleList(checkPrompt);
+  if (!list || list.length % 2 === 0) return false;
+  const middle = list[Math.floor(list.length / 2)];
+  const said = numbersIn(stripAbsentNumbers(studentText));
+  return said.length > 0 && said.every((n) => same(n, middle));
+}
+
+/**
+ * Backup line if Grok cannot check the list. Grok writes the live line; this is what is spoken
+ * when that check fails. The full stored trace is never spoken.
+ */
+export function middleMissLine(checkPrompt: string, studentText: string, lastLine = ""): string | null {
+  if (!spokenMissWord(checkPrompt, studentText)) return null;
+  const list = exampleList(checkPrompt)!;
+  const middle = list[Math.floor(list.length / 2)];
+  const ask = "Which numbers do you check?";
+  const mid = sayNumber(middle);
+  const wrong = spokenMissWord(checkPrompt, studentText)!;
+  if (/\bisn'?t the middle\b/i.test(lastLine)) {
+    return `${capWord(mid)} is the one in the middle. What would you check next?`;
+  }
+  return `${capWord(wrong)} isn't the middle. ${capWord(mid)} is. ${ask}`;
+}
+
 // ---------------------------------------------------------------------------------------
 // The leak check
 

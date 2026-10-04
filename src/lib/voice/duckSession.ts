@@ -31,6 +31,8 @@ export interface DuckSessionOptions {
   topic: string;
   confidence: number;
   deviceId?: string;
+  /** Where the duck's voice is played. Empty means the computer's current default speaker. */
+  sinkId?: string;
   transport?: DuckTransport;
 }
 
@@ -85,7 +87,7 @@ export class DuckSession {
       const connected = new Promise<void>((resolve, reject) => {
         this.ready = { resolve, reject };
       });
-      void this.voice.start(this.options.deviceId);
+      void this.voice.start(this.options.deviceId, this.options.sinkId);
       const { sectionId, topic, confidence } = this.options;
       const [start] = await Promise.all([this.transport.startSession({ sectionId, topic, confidence }), connected]);
       this.sessionId = start.sessionId;
@@ -321,7 +323,7 @@ export class DuckSession {
     await this.end("wrap_up");
   }
 
-  // ---- silence timers (8 s rephrase, 20 s offer skip, 45 s pause) ----------
+  // ---- silence timers (soft wait, offer skip, pause) ----------
 
   /** `elapsedMs` is quiet time that has already passed since the duck stopped talking. */
   private startSilenceTimers(elapsedMs = 0) {

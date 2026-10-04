@@ -91,7 +91,8 @@ describe("a right answer is reinforced", () => {
   it("can be switched off in the config", () => {
     ENGINE.reinforceAfterCorrect = false;
     const o = turn(asking("c_12", { levelReached: "L1", score: 0.3 }), RIGHT, covered);
-    expect(o.move.kind).toBe("question");
+    expect(o.move.kind).toBe("ack");
+    expect(o.move.then?.kind).toBe("question");
   });
 
   it("has a backup line that follows the duck's rules", () => {
@@ -139,7 +140,7 @@ describe("wording a reinforce move", () => {
       { fetchImpl: g.fetchImpl },
     );
     expect(out.source).toBe("ai");
-    expect(g.bodies[0].messages[1].content).toMatch(/say it back/);
+    expect(g.bodies[0].messages[1].content).toMatch(/say that bit back/);
   });
 });
 
@@ -148,40 +149,30 @@ describe("wording a reply to a wrong answer", () => {
     process.env.XAI_API_KEY = "test-key";
   });
 
-  it("tells Grok to ask why they think that and add a small hint", async () => {
-    const g = fakeGrok("Oh, why do you think that? Try it with a messy list.");
+  it("tells Grok to let them test the belief, and never say it is wrong", async () => {
+    const g = fakeGrok("What if the list isn't in order?");
     await wordMoveDetailed({ ...BASE, studentWas: "wrong" }, { fetchImpl: g.fetchImpl });
     const task = g.bodies[0].messages[1].content;
-    expect(task).toMatch(/why they think that/);
-    expect(task).toMatch(/small hint/);
-    expect(task).toMatch(/never say it is wrong/i);
+    expect(task).toMatch(/test it themselves|what if/i);
+    expect(task).toMatch(/never say that is wrong/i);
+    expect(task).not.toMatch(/ask why they think that/);
   });
 
   it("does not use that wording for a student who was not wrong", async () => {
     const g = fakeGrok("Wait, what if the list is messy?");
     await wordMoveDetailed(BASE, { fetchImpl: g.fetchImpl });
-    expect(g.bodies[0].messages[1].content).not.toMatch(/why they think that/);
+    expect(g.bodies[0].messages[1].content).not.toMatch(/belief that may be off/);
   });
 
-  it("rejects a reply with no question, and retries once", async () => {
-    expect(lineProblem("Look at the middle again.", { ...BASE, studentWas: "wrong", level: "L3" })).toMatch(
-      /why they think that/,
-    );
-    expect(lineProblem("Oh, why do you think that? Try 2, 5, 9.", { ...BASE, studentWas: "wrong", level: "L3" })).toBeNull();
-  });
-
-  it("needs the question to ask why, then a small hint as a statement", () => {
-    const wrong = { ...BASE, studentWas: "wrong", level: "L3" } as const;
-    expect(lineProblem("Oh, why do you think that?", wrong)).toMatch(/small hint/);
-    expect(lineProblem("What about the list? Try 2, 5, 9.", wrong)).toMatch(/why they think that/);
-    expect(lineProblem("Oh, why do you think that? Try 2, 5, 9.", wrong)).toBeNull();
-    // A bare statement-style "why" is not a question.
-    expect(lineProblem("Tell me why. Try 2, 5, 9, looking for 9?", wrong)).toMatch(/why they think that/);
+  it("rejects a slide pointer or a judgement", () => {
+    expect(lineProblem("Look at slide 4 again.", { ...BASE, studentWas: "wrong", level: "L1" })).toMatch(/slide/);
+    expect(lineProblem("That's wrong. Try again?", { ...BASE, studentWas: "wrong", level: "L1" })).toMatch(/judges/);
+    expect(lineProblem("What if the list isn't in order?", { ...BASE, studentWas: "wrong", level: "L1" })).toBeNull();
   });
 
   it("leaves the L4 explanation alone: that one explains, then asks them to say it back", async () => {
     const g = fakeGrok("It only works on sorted lists, because half is thrown away. Can you say why?");
     await wordMoveDetailed({ ...BASE, level: "L4", studentWas: "wrong" }, { fetchImpl: g.fetchImpl });
-    expect(g.bodies[0].messages[1].content).not.toMatch(/why they think that/);
+    expect(g.bodies[0].messages[1].content).not.toMatch(/belief that may be off/);
   });
 });

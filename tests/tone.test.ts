@@ -109,7 +109,7 @@ describe("the tone note travels with the session", () => {
     expect(seen.every((s) => s.toneHint === TONE)).toBe(true);
   });
 
-  it("is passed to the wording of the 8 second rephrase", async () => {
+  it("is passed to the wording of the first silence wait", async () => {
     const { deps, seen } = spyDeps();
     const run = freshSession(defs);
     run.concepts[0].levelReached = "L1";

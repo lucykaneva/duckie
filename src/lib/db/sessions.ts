@@ -342,6 +342,24 @@ async function logRow(client: PoolClient, sessionId: string, row: LogRow): Promi
   );
 }
 
+/** The last few things said, oldest first, so Grok can check this turn against the question that started it. */
+async function recentDialogue(client: PoolClient, sessionId: string): Promise<string> {
+  const found = await client.query<{ source: string; text: string; line: string }>(
+    `SELECT source, text, line FROM turns WHERE session_id = $1 ORDER BY n DESC LIMIT 6`,
+    [sessionId],
+  );
+  const clip = (value: string) => {
+    const flat = value.replace(/\s+/g, " ").trim();
+    return flat.length <= 240 ? flat : flat.slice(0, 240);
+  };
+  const lines: string[] = [];
+  for (const row of found.rows.reverse()) {
+    if (row.text.trim()) lines.push(`Student: ${clip(row.text)}`);
+    if (row.line.trim()) lines.push(`Duck: ${clip(row.line)}`);
+  }
+  return lines.join("\n");
+}
+
 /**
  * Evaluate one finished student turn and save everything it changed: the concept
  * states, the engine state and the log rows (the turn, plus the follow-up after a celebration).
@@ -366,6 +384,7 @@ export async function runTurn(
     const { defs, run, nextN } = locked.session;
 
     const answers = await loadAnswers(client, locked.session.sectionId);
+    const conversation = await recentDialogue(client, sessionId);
     const config = sessionConfig(run.configOverrides);
     const { outcome, meta } = await orchestrateTurn(
       {
@@ -373,6 +392,7 @@ export async function runTurn(
         run,
         answers,
         text: turn.text,
+        conversation,
         nowMs: (turn.endedAt ?? new Date()).getTime(),
         toneHint: run.toneHint,
       },

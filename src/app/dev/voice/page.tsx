@@ -32,8 +32,10 @@ export default function VoiceSpikePage() {
   const nextId = useRef(0);
 
   const [state, setState] = useState<DuckState>("idle");
-  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
+  const [speakers, setSpeakers] = useState<MediaDeviceInfo[]>([]);
   const [deviceId, setDeviceId] = useState("");
+  const [sinkId, setSinkId] = useState("");
   const [mode, setMode] = useState<"mock" | "real">("mock");
   const [slowServer, setSlowServer] = useState(false);
   const [failTurns, setFailTurns] = useState(0);
@@ -66,7 +68,8 @@ export default function VoiceSpikePage() {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     stream.getTracks().forEach((t) => t.stop());
     const all = await navigator.mediaDevices.enumerateDevices();
-    setDevices(all.filter((d) => d.kind === "audioinput"));
+    setMics(all.filter((d) => d.kind === "audioinput"));
+    setSpeakers(all.filter((d) => d.kind === "audiooutput"));
   }
 
   function onEvent(event: DuckSessionEvent) {
@@ -138,6 +141,7 @@ export default function VoiceSpikePage() {
         topic,
         confidence,
         deviceId: deviceId || undefined,
+        sinkId: sinkId || undefined,
         transport: mode === "mock" ? mockTransport({ turnDelayMs: slowServer ? 3_000 : 0, failTurns }) : httpTransport,
       },
       onEvent,
@@ -194,16 +198,27 @@ export default function VoiceSpikePage() {
 
       <section className="flex flex-wrap items-center gap-3">
         <button className="rounded border px-3 py-2" onClick={loadDevices} disabled={running}>
-          List mics
+          List devices
         </button>
         <select className="rounded border px-3 py-2" value={deviceId} onChange={(e) => setDeviceId(e.target.value)} disabled={running}>
           <option value="">Default mic</option>
-          {devices.map((d) => (
+          {mics.map((d) => (
             <option key={d.deviceId} value={d.deviceId}>
               {d.label || d.deviceId}
             </option>
           ))}
         </select>
+        <select className="rounded border px-3 py-2" value={sinkId} onChange={(e) => setSinkId(e.target.value)} disabled={running}>
+          <option value="">Default speaker</option>
+          {speakers.map((d) => (
+            <option key={d.deviceId} value={d.deviceId}>
+              {d.label || d.deviceId}
+            </option>
+          ))}
+        </select>
+        <p className="w-full text-xs text-zinc-500">
+          Bluetooth connected is not always the output. Choose the JBL in the speaker list if it is not the Mac default, and choose the laptop or clip-on mic, not the JBL. A speaker used as the mic switches to call mode and drops lines.
+        </p>
         {running ? (
           <>
             <button className="rounded bg-black px-4 py-2 text-white dark:bg-white dark:text-black" onClick={() => void sessionRef.current?.end()}>

@@ -42,15 +42,16 @@ afterEach(() => {
 });
 
 describe("isWorded", () => {
-  it("rewords help questions, rephrases, celebrations, and a reply to the student", () => {
+  it("rewords check questions as well as later help", () => {
+    expect(isWorded({ kind: "question", level: "L0" })).toBe(true);
     expect(isWorded({ kind: "question", level: "L1" })).toBe(true);
     expect(isWorded({ kind: "rephrase", level: "L3" })).toBe(true);
     expect(isWorded({ kind: "celebrate", level: "L0" })).toBe(true);
     expect(isWorded({ kind: "open", level: "L0" })).toBe(true);
+    expect(isWorded({ kind: "wait", level: "L1" })).toBe(true);
   });
 
-  it("never rewords the opening check question or the rule-defined lines", () => {
-    expect(isWorded({ kind: "question", level: "L0" })).toBe(false);
+  it("never rewords the rule-defined lines", () => {
     for (const kind of ["ack", "offer_skip", "check_in", "pause", "wrap_up", "propose_wrap_up"] as const) {
       expect(isWorded({ kind: kind as never, level: "L1" })).toBe(false);
     }
@@ -91,6 +92,50 @@ describe("lineProblem", () => {
     }
   });
 
+  it("rejects a line that points at a slide or page", () => {
+    const l2 = { kind: "question", level: "L2" } as const;
+    expect(lineProblem("Okay, let's try that.", l2)).toMatch(/only agrees/);
+    expect(lineProblem("So the search space shrinks.", { ...l2, studentWords: "just 5 and 7" })).toMatch(/textbook/);
+    expect(
+      lineProblem("What if we sort those three numbers?", { ...l2, studentLost: true, studentWords: "it's a list" }),
+    ).toMatch(/numbers/);
+    expect(lineProblem("Hmm, does the order of the things matter?", l2)).toBeNull();
+    expect(lineProblem("What does slide 7 say about this?", l2)).toMatch(/slide/);
+    expect(lineProblem("Look at the notes and try again?", l2)).toMatch(/slide|page|screen/);
+  });
+
+  it("asks one question at L1 instead of stopping on a reflection", () => {
+    expect(lineProblem("So you start in the middle.", { kind: "question", level: "L1" })).toMatch(/one natural question/);
+    expect(lineProblem("So you start in the middle. What happens next?", { kind: "question", level: "L1" })).toBeNull();
+  });
+
+  it("rejects a line that asks the same thing again", () => {
+    const last = "Three isn't the middle. Five is. Which numbers do you check?";
+    expect(lineProblem("Five is the middle. Which numbers do you check?", { kind: "question", level: "L1", lastDuckLine: last })).toMatch(
+      /repeats/,
+    );
+    expect(
+      lineProblem("Once you are on five, what would you check next?", { kind: "question", level: "L1", lastDuckLine: last }),
+    ).toBeNull();
+    expect(lineProblem("What if we sorted the pebbles first?", { kind: "question", level: "L1" })).toMatch(/pebbles/);
+    expect(lineProblem("Does the list have to be in order first?", { kind: "question", level: "L1" })).toBeNull();
+    expect(
+      lineProblem("Okay, is three really the middle of those numbers?", {
+        kind: "question",
+        level: "L1",
+        studentWords: "Is 3 really the middle? Can you look at that list?",
+      }),
+    ).toMatch(/question back/);
+    expect(
+      lineProblem("Mm, so baking bread uses the same idea as the leaf then?", {
+        kind: "open",
+        level: "L2",
+        studentWords: "Whatever, I was actually thinking about how to bake bread.",
+        lastDuckLine: "Mm, is soil really the food for the leaf then?",
+      }),
+    ).toMatch(/changed the subject/);
+  });
+
   it("makes L4 end with exactly one question, and a celebration have none", () => {
     expect(lineProblem("It needs a sorted list. Can you say why?", { kind: "question", level: "L4" })).toBeNull();
     expect(lineProblem("It needs a sorted list.", { kind: "question", level: "L4" })).toMatch(/say it back/);
@@ -101,23 +146,23 @@ describe("lineProblem", () => {
 
 describe("wordMoveDetailed", () => {
   it("returns Grok's line when it passes every check", async () => {
-    const grok = fakeGrok(["Ooh, so would that work on my pebbles?"]);
+    const grok = fakeGrok(["Does the list have to be in order first?"]);
     const result = await wordMoveDetailed(BASE, { fetchImpl: grok.fetchImpl });
-    expect(result).toMatchObject({ line: "Ooh, so would that work on my pebbles?", source: "ai", attempts: 1 });
+    expect(result).toMatchObject({ line: "Does the list have to be in order first?", source: "ai", attempts: 1 });
   });
 
   it("cleans up decoration like quotes and a leading label", async () => {
-    const grok = fakeGrok(['Duck: "Does that work on my pebbles?"']);
+    const grok = fakeGrok(['Duck: "Does the list have to be in order first?"']);
     const result = await wordMoveDetailed(BASE, { fetchImpl: grok.fetchImpl });
-    expect(result.line).toBe("Does that work on my pebbles?");
+    expect(result.line).toBe("Does the list have to be in order first?");
     expect(result.source).toBe("ai");
   });
 
   it("retries once when the line breaks a rule, and tells Grok what was wrong", async () => {
     const tooLong = Array(25).fill("word").join(" ");
-    const grok = fakeGrok([tooLong, "Does that work on my pebbles?"]);
+    const grok = fakeGrok([tooLong, "Does the list have to be in order first?"]);
     const result = await wordMoveDetailed(BASE, { fetchImpl: grok.fetchImpl });
-    expect(result).toMatchObject({ line: "Does that work on my pebbles?", source: "ai", attempts: 2 });
+    expect(result).toMatchObject({ line: "Does the list have to be in order first?", source: "ai", attempts: 2 });
     const retry = grok.bodies[1].messages;
     expect(retry.at(-1)?.content).toMatch(/rejected because it has 25 words/);
     expect(retry.at(-2)?.role).toBe("assistant");
@@ -151,7 +196,7 @@ describe("wordMoveDetailed", () => {
 
   it("skips the retry when too little of the time budget is left", async () => {
     let clock = 0;
-    const grok = fakeGrok([Array(25).fill("word").join(" "), "Does that work on my pebbles?"]);
+    const grok = fakeGrok([Array(25).fill("word").join(" "), "Does the list have to be in order first?"]);
     const fetchImpl: typeof grok.fetchImpl = async (url, init) => {
       clock += 3_000; // the first attempt used up most of the 3.5 s budget
       return grok.fetchImpl(url, init);
@@ -179,13 +224,12 @@ describe("wordMoveDetailed", () => {
       line: "You caught the update bug. Come back to log n.",
       source: "ai",
     });
-    expect(grok.bodies[0].messages[1].content).toMatch(/If they taught something/);
+    expect(grok.bodies[0].messages[1].content).toMatch(/best moment/);
   });
 
   it("does not call Grok at all for lines the engine owns", async () => {
     const grok = fakeGrok(["should never be used"]);
     for (const input of [
-      { ...BASE, kind: "question" as const, level: "L0" as const },
       { ...BASE, kind: "ack" as const },
       { ...BASE, kind: "pause" as const },
       { ...BASE, kind: "wrap_up" as const, level: "L0" as const },
@@ -197,22 +241,23 @@ describe("wordMoveDetailed", () => {
   });
 
   it("wordMove returns just the line", async () => {
-    const grok = fakeGrok(["Does that work on my pebbles?"]);
-    expect(await wordMove(BASE, { fetchImpl: grok.fetchImpl })).toBe("Does that work on my pebbles?");
+    const grok = fakeGrok(["Does the list have to be in order first?"]);
+    expect(await wordMove(BASE, { fetchImpl: grok.fetchImpl })).toBe("Does the list have to be in order first?");
   });
 });
 
 describe("what Grok is sent", () => {
   it("includes the level task, concept, plain line and the student's words, but nothing secret", async () => {
-    const grok = fakeGrok(["What does slide 4 say about the order?"]);
+    const grok = fakeGrok(["Hmm, does the order of the things matter?"]);
     await wordMoveDetailed(
-      { ...BASE, level: "L2", slide: 4, toneHint: "Likes jokes." },
+      { ...BASE, level: "L2", toneHint: "Likes jokes." },
       { fetchImpl: grok.fetchImpl },
     );
     const [system, user] = grok.bodies[0].messages;
     expect(system.content).toMatch(/20 words or fewer/);
     expect(user.content).toMatch(/everyday words/);
-    expect(user.content).not.toContain("(slide 4)");
+    expect(user.content).toContain("Concept: Sorted input");
+    expect(user.content).not.toMatch(/slide 4/);
     expect(user.content).toContain(FALLBACK);
     expect(user.content).toContain("You look at the middle and keep halving.");
     expect(user.content).toMatch(/Intent of this move/);
@@ -229,19 +274,19 @@ describe("what Grok is sent", () => {
         conceptName: "Sorted input",
         topic: "Binary search",
         studentWords: "Hello?",
-        fallbackLine: "Ooh! Can you explain it to me? I'm just a duck.",
+        fallbackLine: "I don't really get binary search yet. How does it work?",
       },
       { fetchImpl: grok.fetchImpl },
     );
     const user = grok.bodies[0].messages[1].content;
-    expect(user).toMatch(/Reply to what the student just said/);
+    expect(user).toMatch(/Reply to what they just said/);
     expect(user).toContain("Hello?");
     expect(user).toContain("Binary search");
-    expect(user).toMatch(/do not recite/);
+    expect(user).toMatch(/quiz a specific gap|NEVER say walk me through/i);
   });
 
   it("cuts a very long student turn down to its end and flattens line breaks", async () => {
-    const grok = fakeGrok(["Does that work on my pebbles?"]);
+    const grok = fakeGrok(["Does the list have to be in order first?"]);
     const long = "start ".repeat(300) + "THE END\nnew line";
     await wordMoveDetailed({ ...BASE, studentWords: long }, { fetchImpl: grok.fetchImpl });
     const user = grok.bodies[0].messages[1].content;
@@ -252,29 +297,29 @@ describe("what Grok is sent", () => {
 
 describe("questions need a question mark", () => {
   it("turns a question that ends in a full stop into a real question", async () => {
-    const grok = fakeGrok(["What happens to the list each step."]);
-    const result = await wordMoveDetailed(
-      { ...BASE, level: "L2", slide: 4 },
-      { fetchImpl: grok.fetchImpl },
-    );
-    expect(result).toMatchObject({ line: "What happens to the list each step?", source: "ai" });
+    const grok = fakeGrok(["Does the order of the things matter."]);
+    const result = await wordMoveDetailed({ ...BASE, level: "L2" }, { fetchImpl: grok.fetchImpl });
+    expect(result).toMatchObject({ line: "Does the order of the things matter?", source: "ai" });
   });
 
   it("fixes only the last sentence, and leaves statements alone", async () => {
-    const one = fakeGrok(["The list shrinks each step. What happens to it."]);
-    const fixed = await wordMoveDetailed({ ...BASE, level: "L2", slide: 4 }, { fetchImpl: one.fetchImpl });
-    expect(fixed.line).toBe("The list shrinks each step. What happens to it?");
+    const one = fakeGrok(["Order might matter. Does it."]);
+    const fixed = await wordMoveDetailed({ ...BASE, level: "L2" }, { fetchImpl: one.fetchImpl });
+    expect(fixed.line).toBe("Order might matter. Does it?");
 
-    const statement = fakeGrok(["Try it with just 2, 5, 9, looking for 9."]);
+    const statement = fakeGrok(["Imagine five numbers in a row. What happens if you check the middle."]);
     const kept = await wordMoveDetailed({ ...BASE, level: "L3" }, { fetchImpl: statement.fetchImpl });
-    expect(kept.line).toBe("Try it with just 2, 5, 9, looking for 9.");
+    expect(kept.line).toBe("Imagine five numbers in a row. What happens if you check the middle?");
   });
 
-  it("rejects an L1 or L2 line that is not a question at all, then retries", async () => {
-    expect(lineProblem("Halving sounds neat.", { kind: "question", level: "L1" })).toMatch(/question mark/);
-    const grok = fakeGrok(["Halving sounds neat.", "Does halving work on my pebbles?"]);
-    const result = await wordMoveDetailed(BASE, { fetchImpl: grok.fetchImpl });
-    expect(result).toMatchObject({ line: "Does halving work on my pebbles?", attempts: 2 });
+  it("rejects an L3 line that is not a question, then retries", async () => {
+    expect(lineProblem("Halving sounds neat.", { kind: "question", level: "L3" })).toMatch(/tiny example/);
+    const grok = fakeGrok(["Halving sounds neat.", "Imagine five numbers. What happens after one check?"]);
+    const result = await wordMoveDetailed({ ...BASE, level: "L3" }, { fetchImpl: grok.fetchImpl });
+    expect(result).toMatchObject({
+      line: "Imagine five numbers. What happens after one check?",
+      attempts: 2,
+    });
   });
 });
 
@@ -293,8 +338,47 @@ describe("a student without the slides", () => {
     const result = await wordMoveDetailed(input, { fetchImpl: grok.fetchImpl });
     expect(result).toMatchObject({ source: "ai", attempts: 1 });
     const user = grok.bodies[0].messages[1].content;
-    expect(user).toMatch(/mention slides/i);
+    expect(user).toMatch(/No slides|mention slides/i);
     expect(user).not.toContain("(slide 4)");
+  });
+
+  it("asks Grok to check the list it already spoke, and rejects a line that agrees with the wrong number", async () => {
+    const asked = "Test me: 1, 3, 5, 7, 9, looking for 6. Which numbers do you check?";
+    const input: WordMoveInput = {
+      ...BASE,
+      conceptName: "When it stops",
+      studentWords: "Okay so, I guess like we would start at 3?",
+      fallbackLine: "Three isn't the middle. Five is. Which numbers do you check?",
+      lastDuckLine: asked,
+      spokenMiss: "three",
+      conversation: `Duck: ${asked}\nStudent: Okay so, I guess like we would start at 3?`,
+    };
+    expect(
+      lineProblem("So we start in the middle at three. What if six isn't hiding in there at all?", input),
+    ).toMatch(/agrees three/);
+    expect(lineProblem("So three might not really be the middle.", input)).toMatch(/might/);
+    expect(lineProblem("What if the thing I want isn't in the list at all?", input)).toMatch(/never checks/);
+    expect(lineProblem("Three isn't the middle. Five is. Which numbers do you check?", input)).toBeNull();
+    expect(
+      lineProblem("Five is the middle of one, three, five, seven, nine. Which numbers do you check?", input),
+    ).toBeNull();
+
+    const grok = fakeGrok([
+      "So we start in the middle at three. What if six isn't hiding in there at all?",
+      "Three isn't the middle. Five is. Which numbers do you check?",
+    ]);
+    const result = await wordMoveDetailed(input, { fetchImpl: grok.fetchImpl });
+    expect(result).toMatchObject({
+      line: "Three isn't the middle. Five is. Which numbers do you check?",
+      source: "ai",
+      attempts: 2,
+    });
+    const user = grok.bodies[0].messages[1].content;
+    expect(user).toContain("They said three");
+    expect(user).toContain("Conversation so far");
+    expect(user).toContain("1, 3, 5, 7, 9");
+    expect(user).not.toMatch(/\[5,\s*7\]|expectedAnswer/);
+    expect(grok.bodies[0].messages[0].content).toMatch(/do not ask the same question again/i);
   });
 
   it("rejects a line that still mentions slides, then retries", async () => {

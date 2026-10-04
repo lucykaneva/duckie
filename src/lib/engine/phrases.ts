@@ -9,6 +9,9 @@ export const DONT_KNOW_PATTERNS: RegExp[] = [
   /\bno idea\b/,
   /\bno clue\b/,
   /\bnot sure at all\b/,
+  /\bnot really sure\b/,
+  /\bforgot\b/,
+  /\bdo(?:n'?t| not)(?: really)? remember\b/,
 ];
 
 /**
@@ -60,6 +63,8 @@ export const PLANTED_AGREE_PATTERNS: RegExp[] = [
   /\b(?:that(?:'s| is)|it(?:'s| is)) (?:fine|okay|ok|alright|all right)\b/,
   /\b(?:that|it) should (?:be )?(?:fine|okay|ok|work)\b/,
   /\bi think (?:that(?:'s| is)|it(?:'s| is)) (?:fine|okay|ok)\b/,
+  // "lo equals mid is fine" — they name the claim and call it okay.
+  /\b(?:is|seems|sounds) (?:fine|okay|ok|alright|all right)\b/,
   /^(?:yes|yeah|yep|yup|sure|ok(?:ay)?|fine)(?: it is| that is)?[.!? ]*$/,
 ];
 
@@ -81,6 +86,7 @@ export const HELP_REQUEST_PATTERNS: RegExp[] = [
   /\bi need (?:some |a little )?help\b/,
   /\b(?:a|any|some) hints?\b/,
   /\b(?:i'm|i am|im) stuck\b/,
+  /\bjust tell me\b/,
 ];
 
 /**
@@ -108,11 +114,40 @@ export const CLARIFY_PATTERNS: RegExp[] = [
   /\b(?:can|could) you (?:please )?(?:repeat|say) (?:that|it|the question)(?: again)?\b/,
   /\b(?:say|repeat) (?:that|it|the question) (?:again|one more time)\b/,
   /\bcome again\b/,
+  /\bthrough what\b/,
   /^(?:sorry|pardon|huh|what)[?.! ]*$/,
   // "What's a pebble?": a bare question about one or two words.
   /^(?:and )?what(?:'s| is| are) (?:a |an |the |my )?[a-z']+(?: [a-z']+){0,3}\??$/,
   // "I'm not sure what a sorted input is": they are asking about the duck's own words.
   /\b(?:not sure|unsure|don'?t know|no idea|don'?t understand|confused about) what (?:an? |the )?[a-z' ]{1,30}? (?:is|means|are)\b/,
+];
+
+/** They are ready to start, not answering a question: "okay, let's do that", "sounds good". */
+export const READY_PATTERNS: RegExp[] = [
+  /^(?:ok(?:ay)?|sure|yeah|yep|alright|let'?s go)[.!]*$/,
+  /\b(?:let'?s|lets) (?:do (?:that|this|it)|go|start|try)\b/,
+  /\bsounds good\b/,
+  /\b(?:ok(?:ay)?|yeah|sure),? let'?s\b/,
+];
+
+/**
+ * They want the session to wind down, not to skip one idea. "I'm tired of checking" is them teaching.
+ * An explicit "let's wrap up" is handled separately and closes.
+ */
+export const TIRED_PATTERNS: RegExp[] = [
+  /\bi(?:'m| am) (?:so |really |pretty |just |kinda |kind of )?tired(?! of)\b/,
+  /\bi(?:'m| am) exhausted\b/,
+  /\bi need a break\b/,
+  /\bthis is a lot[.!]*$/,
+  /\bcan we (?:just )?stop\b/,
+];
+
+/** They are frustrated that the duck asked again: "I just said", "I already told you". */
+export const FRUSTRATION_PATTERNS: RegExp[] = [
+  /\bi just (?:said|told)\b/,
+  /\bi already (?:said|told)\b/,
+  /\bi told you\b/,
+  /\bstop asking\b/,
 ];
 
 /** A question the duck cannot answer: it has a question mark, or starts like one. */

@@ -1,7 +1,7 @@
 // Browser-only Grok Voice session. The duck never improvises: Grok is used for
 // speech in (turn detection + transcripts) and to speak lines we hand it verbatim.
-import { DUCK } from "@/lib/duck/config";
-import { PcmPlayer, startMic, toBase64, fromBase64, type Mic } from "./audio";
+import { DUCK, VOICE } from "@/lib/duck/config";
+import { PcmPlayer, toBase64, fromBase64, type Mic } from "./audio";
 
 const REALTIME_URL = "wss://api.x.ai/v1/realtime?model=grok-voice-latest";
 const FINAL_TRANSCRIPT_WAIT_MS = 1_000;
@@ -68,22 +68,31 @@ export class DuckVoice {
   private responseActive = false;
   private responseIsOurs = false;
   private finalizeTimer: ReturnType<typeof setTimeout> | null = null;
+  /** True from the first sample of a line until those samples have been handed to the speaker. */
+  private outputActive = false;
+  private playbackStartedAt: number | null = null;
+  /** When the line finished. Bluetooth is still audible until VOICE.echoTailMs after this. */
+  private echoQuietAt: number | null = null;
+  private floorPeak = 0.02;
+  private bargeLoudSince: number | null = null;
 
   constructor(private onEvent: (event: VoiceEvent) => void) {}
 
-  async start(deviceId?: string) {
+  async start(deviceId?: string, sinkId?: string) {
     this.setStatus("connecting");
+    // Created in the click, before any await, so the browser will actually play sound.
+    this.player = new PcmPlayer();
+    this.player.onIdle = () => this.checkDuckFinished();
+    const unlocked = this.player.unlock(sinkId);
+    // Handled below if startMic fails first; otherwise the rejection is an unhandled promise.
+    unlocked.catch(() => {});
     try {
       const tokenPromise = fetchToken();
       // Handled by the await below; without this the rejection fires while the mic prompt is open.
       tokenPromise.catch(() => {});
       // Start capturing before the socket opens so the first words are not lost.
-      this.mic = await startMic(deviceId, (chunk, peak) => {
-        this.sendAudio(chunk);
-        this.emit({ type: "mic_level", peak, chunksSent: this.chunksSent });
-      });
-      this.player = new PcmPlayer();
-      this.player.onIdle = () => this.checkDuckFinished();
+      this.mic = await this.player.startMic(deviceId, (chunk, peak) => this.onMicChunk(chunk, peak));
+      await unlocked;
 
       const token = await tokenPromise;
       const ws = new WebSocket(REALTIME_URL, [`xai-client-secret.${token}`]);
@@ -104,7 +113,10 @@ export class DuckVoice {
 
   /** Speak an exact line, word for word, via xAI's force_message. */
   speak(line: string) {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      this.emit({ type: "error", message: "Could not speak: voice connection is not open" });
+      return;
+    }
     this.pendingLines.push(line);
     this.send({
       type: "conversation.item.create",
@@ -118,7 +130,12 @@ export class DuckVoice {
   }
 
   /** Stop the duck's audio immediately (barge-in, or the student hit stop). */
-  hush() {
+  hush(opts?: { userSpeaking?: boolean }) {
+    this.outputActive = false;
+    this.playbackStartedAt = null;
+    // A Bluetooth speaker keeps sounding briefly after we stop. That tail is echo, unless
+    // the student is the one who interrupted: then their words have to reach the transcript.
+    this.echoQuietAt = opts?.userSpeaking ? null : Date.now();
     this.player?.stop();
     if (this.responseActive) this.send({ type: "response.cancel" });
     if (this.status === "speaking") this.setStatus("listening");
@@ -176,6 +193,9 @@ export class DuckVoice {
   private handle(event: ServerEvent) {
     switch (event.type) {
       case "input_audio_buffer.speech_started": {
+        // While our line is playing, server VAD is hearing the JBL. Cutting here deletes the
+        // line the dev log already showed. A real interruption is decided from the mic level.
+        if (this.outputActive) return;
         const at = new Date().toISOString();
         if (!this.speechStartedAt) this.speechStartedAt = at;
         this.speechStoppedAt = null;
@@ -189,6 +209,7 @@ export class DuckVoice {
         return;
       }
       case "input_audio_buffer.speech_stopped": {
+        if (this.outputActive) return;
         this.speechStoppedAt = new Date().toISOString();
         this.emit({ type: "speech_stopped", at: this.speechStoppedAt });
         // The last transcript usually lands a few hundred ms after this; wait for it.
@@ -198,6 +219,7 @@ export class DuckVoice {
       // xAI sends the running transcript of the current utterance, several times, on both events.
       case "conversation.item.input_audio_transcription.updated":
       case "conversation.item.input_audio_transcription.completed": {
+        if (this.outputActive) return;
         const segment = event.transcript?.trim();
         if (!segment) return;
         this.turnSegments.set(event.item_id ?? "", segment);
@@ -224,6 +246,9 @@ export class DuckVoice {
       case "response.output_audio.delta":
       case "response.audio.delta": {
         if (!event.delta || !this.responseIsOurs) return;
+        if (!this.outputActive) this.playbackStartedAt = Date.now();
+        this.outputActive = true;
+        this.echoQuietAt = null;
         this.player?.play(fromBase64(event.delta));
         if (this.status !== "speaking") this.setStatus("speaking");
         return;
@@ -254,8 +279,68 @@ export class DuckVoice {
    */
   private checkDuckFinished() {
     if (this.responseActive || this.player?.playing) return;
+    if (this.outputActive) {
+      this.outputActive = false;
+      this.playbackStartedAt = null;
+      this.echoQuietAt = Date.now();
+    }
     if (this.status === "speaking") this.setStatus("listening");
     this.emit({ type: "duck_idle" });
+  }
+
+  /**
+   * The JBL plays into the mic. Sending that audio makes Grok hear speech and cut the line off,
+   * which is why the dev log showed a line the speaker never finished. Drop it unless the student
+   * is clearly louder than the room.
+   */
+  private onMicChunk(chunk: ArrayBuffer, peak: number) {
+    const now = Date.now();
+    const inTail = this.echoQuietAt !== null && now - this.echoQuietAt < VOICE.echoTailMs;
+    this.emit({ type: "mic_level", peak, chunksSent: this.chunksSent });
+
+    if (!this.outputActive && !inTail) {
+      this.floorPeak = this.floorPeak * 0.96 + peak * 0.04;
+      this.bargeLoudSince = null;
+      this.sendAudio(chunk);
+      return;
+    }
+
+    if (this.outputActive && this.maybeBargeIn(peak, now)) {
+      this.sendAudio(chunk);
+      return;
+    }
+
+    if (!this.outputActive && inTail && peak >= this.bargeThreshold()) {
+      this.echoQuietAt = null;
+      this.bargeLoudSince = null;
+      this.sendAudio(chunk);
+      return;
+    }
+
+    // Keep the socket fed, but with silence, so the speaker is not transcribed as the student.
+    this.sendAudio(new ArrayBuffer(chunk.byteLength));
+  }
+
+  private bargeThreshold() {
+    return Math.max(this.floorPeak * VOICE.bargeInOverFloor, VOICE.bargeInMicPeak);
+  }
+
+  /** True when this chunk is the student talking over the duck, and the line has been stopped. */
+  private maybeBargeIn(peak: number, now: number) {
+    if (this.playbackStartedAt === null || now - this.playbackStartedAt < VOICE.bargeInSettleMs) {
+      this.bargeLoudSince = null;
+      return false;
+    }
+    if (peak < this.bargeThreshold()) {
+      this.bargeLoudSince = null;
+      return false;
+    }
+    if (this.bargeLoudSince === null) this.bargeLoudSince = now;
+    if (now - this.bargeLoudSince < DUCK.bargeInStopMs) return false;
+    this.bargeLoudSince = null;
+    this.hush({ userSpeaking: true });
+    this.emit({ type: "barge_in", at: new Date().toISOString() });
+    return true;
   }
 
   private scheduleFinalize(ms: number) {

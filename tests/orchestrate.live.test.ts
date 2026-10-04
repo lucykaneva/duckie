@@ -114,11 +114,12 @@ describe.skipIf(!live)("worked example against real Grok", () => {
     // The first four turns are the ones the spec pins down. Later turns depend on Grok
     // catching the planted "lo = mid" misconception, which the live judge sometimes misses.
     expect(log[0]).toMatchObject({ kind: "question", level: "L1", conceptId: "c_12" });
-    expect(log[1]).toMatchObject({ kind: "question", level: "L0", conceptId: "c_14" });
-    expect(log[2]).toMatchObject({ kind: "question", level: "L2", conceptId: "c_14" });
-    expect(log[3]).toMatchObject({ kind: "celebrate", conceptId: "c_14" });
-    expect(log[4]).toMatchObject({ kind: "question", level: "L0", conceptId: "c_15" });
-    expect(log[5]).toMatchObject({ kind: "question", level: "L1", conceptId: "c_15" });
+    expect(log[1]).toMatchObject({ kind: "ack", conceptId: "c_12" });
+    expect(log[2]).toMatchObject({ kind: "question", level: "L0", conceptId: "c_14" });
+    expect(log[3]).toMatchObject({ kind: "question", level: "L2", conceptId: "c_14" });
+    expect(log[4]).toMatchObject({ kind: "celebrate", conceptId: "c_14" });
+    expect(log[5]).toMatchObject({ kind: "question", level: "L0", conceptId: "c_15" });
+    expect(log[6]).toMatchObject({ kind: "question", level: "L1", conceptId: "c_15" });
     expect(run.concepts.find((c) => c.conceptId === "c_13")?.state).toBe("owned");
     expect(run.concepts.find((c) => c.conceptId === "c_14")?.state).toMatch(/assisted|owned|explained_to/);
   }, 90_000);

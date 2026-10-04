@@ -80,18 +80,18 @@ describe("asking the duck to explain", () => {
 describe("what do you mean, in the words", () => {
   it("rewords the duck's own line even for the opening question (level L0)", () => {
     expect(isWorded({ kind: "rephrase", level: "L0", studentAsked: "clarify" })).toBe(true);
-    expect(isWorded({ kind: "rephrase", level: "L0" })).toBe(false); // a plain repeat stays exact
+    expect(isWorded({ kind: "rephrase", level: "L0" })).toBe(true);
   });
 
   it("must explain, not hand the student's question back", () => {
     const input = { kind: "rephrase", level: "L1", studentAsked: "clarify" } as const;
-    expect(lineProblem("Pebbles are just the numbers in your list. Does the order matter?", input)).toBeNull();
+    expect(lineProblem("They're just the numbers in your list. Does the order matter?", input)).toBeNull();
     expect(lineProblem("What do you mean by pebbles?", input)).toMatch(/hands the student's own question back/);
     expect(lineProblem("What does that mean?", input)).toMatch(/hands the student's own question back/);
   });
 
   it("does not demand a slide at L2 for an explanation of its own words", () => {
     const input = { kind: "rephrase", level: "L2", slide: 4, studentAsked: "clarify" } as const;
-    expect(lineProblem("Pebbles are just the numbers in your list.", input)).toBeNull();
+    expect(lineProblem("They're just the numbers in your list.", input)).toBeNull();
   });
 });

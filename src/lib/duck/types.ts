@@ -15,6 +15,8 @@ export type MoveKind =
   | "confidence"
   | "question"
   | "rephrase"
+  /** A soft check while they think. Not a question. */
+  | "wait"
   | "ack"
   | "celebrate"
   /** After a correct answer: confirm it, add one small hint, and ask the student to say it back. */
@@ -60,9 +62,9 @@ export interface DuckMove {
   sessionState: SessionState;
   concepts: ConceptProgress[];
   /**
-   * A follow-up move the duck makes on its own after this one (B9). Only set on a
-   * `celebrate` move: speak `line`, wait for the audio to end plus DUCK.afterCelebrationMs,
-   * then speak `then.line`. The server has already counted `then` as asked.
+   * A follow-up the duck speaks after this line (B9). Set on `celebrate` and on `ack`:
+   * speak `line`, wait for the audio to end plus DUCK.afterCelebrationMs, then speak
+   * `then.line`. The server has already counted `then` as asked.
    */
   then?: DuckMove;
 }

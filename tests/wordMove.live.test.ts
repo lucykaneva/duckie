@@ -33,14 +33,13 @@ const CASES: Array<{ label: string; input: WordMoveInput }> = [
     },
   },
   {
-    label: "L2 point to the slide",
+    label: "L2 nudge the idea",
     input: {
       kind: "question",
       level: "L2",
-      slide: 7,
       conceptName: "When it stops",
       studentWords: STUDENT,
-      fallbackLine: "Slide 7 shows when it stops. What has to be true to stop?",
+      fallbackLine: "What has to be true before you stop looking?",
     },
   },
   {

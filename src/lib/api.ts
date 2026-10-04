@@ -307,7 +307,7 @@ export async function startSession(
         kind: "open",
         level: "L0",
         conceptId: "c_12",
-        line: "Hey. Walk me through this in your words. I'll learn it with you.",
+        line: "I don't really get binary search yet. How does it work?",
         sessionState: "active",
         concepts: [{ id: "c_12", state: "not_yet", score: 0 }],
       },

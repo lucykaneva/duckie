@@ -145,7 +145,7 @@ describe("the AI falling back", () => {
     );
     expect(meta.words[0]).toMatchObject({ source: "fallback" });
     expect(meta.words[0].attempts).toBe(2);
-    expect(outcome.move.line).toBe("What's the tricky part of Sorted input?");
+    expect(outcome.move.line).toBe("Hmm, does the order of the things matter?");
   });
 
   it("blocks a leaking line that wordMove wrote, and still speaks something safe", async () => {
@@ -154,13 +154,15 @@ describe("the AI falling back", () => {
     s.focusConceptId = "c_14";
     s.lastMoveKind = "question";
     stateOf(s, "c_14").moves = 1;
+    stateOf(s, "c_14").levelReached = "L1";
+    stateOf(s, "c_14").score = 0.3;
     const deps = withGrok({
       judge: [verdicts([])],
-      // A normal L2 question, so wordMove accepts it; the leak check then blocks the stored answer inside it.
-      word: ["So you check 5 and 7, right?"],
+      // A normal question, so wordMove accepts it; the leak check then blocks the stored answer inside it.
+      word: ["You'd check 5 and 7, right?"],
     });
     const { outcome, meta } = await orchestrateTurn(
-      { defs, run: s, answers, text: "I don't know", nowMs: 0 },
+      { defs, run: s, answers, text: "the list thing", nowMs: 0 },
       deps,
     );
     expect(meta.leakBlocked).toEqual(["c_14"]);
@@ -180,7 +182,7 @@ describe("the AI falling back", () => {
           { conceptId: "c_16" },
         ]),
       ],
-      word: ["Wait, so my pebbles have to be in order first?"],
+      word: ["Does the list have to be in order first?"],
     });
     const { outcome } = await orchestrateTurn({ defs, run: freshSession(defs), answers, text, nowMs: 0 }, deps);
     expect(stateOf(outcome.session, "c_13").state).toBe("owned");
@@ -239,19 +241,19 @@ describe("the AI falling back", () => {
     expect(stateOf(outcome.session, "c_15").state).not.toBe("misconception");
   });
 
-  it("rewrites an 8 s rephrase through wordMove", async () => {
+  it("words the first silence as a soft wait, not another question", async () => {
     const s = freshSession(defs);
     s.focusConceptId = "c_12";
     s.lastMoveKind = "question";
     s.lastLine = line("c_12", "L1");
     stateOf(s, "c_12").levelReached = "L1";
     stateOf(s, "c_12").moves = 1;
-    const deps = withGrok({ word: ["Wait, so my pebbles have to be in order first?"] });
+    const deps = withGrok({ word: ["Mm. No rush."] });
     const out = await orchestrateSilence({ defs, run: s, answers, step: 1, nowMs: 8_000 }, deps);
     expect(out).not.toBeNull();
     expect(deps.wordCalls).toBe(1);
-    expect(out!.move.kind).toBe("rephrase");
-    expect(out!.move.line).toBe("Wait, so my pebbles have to be in order first?");
+    expect(out!.move.kind).toBe("wait");
+    expect(out!.move.line).toBe("Mm. No rush.");
     expect(out!.signals).toEqual(["silence"]);
     expect(out!.meta.judge).toBe("skipped");
     expect(out!.meta.words[0].source).toBe("ai");
@@ -267,21 +269,25 @@ describe("worked example through the real judgeTurn and wordMove", () => {
       {
         text: "You look at the middle. If the target's bigger you go right, otherwise left. You keep halving.",
         grok: verdicts([{ conceptId: "c_13", covered: "You keep halving" }, { conceptId: "c_12" }]),
-        spoken: "Wait, so my pebbles have to be in order first?",
+        spoken: "Does the list have to be in order first?",
       },
       {
         text: "No, they have to be sorted, or you could throw away the half with the target.",
         grok: verdicts([{ conceptId: "c_12", covered: "they have to be sorted" }]),
+        spoken: "Here is one, three, five, seven, nine, looking for six. Which numbers do you check?",
       },
       {
         text: "Um, I think 5, then 7, then maybe 9?",
         grok: verdicts([]),
-        spoken: "Oh, why do you think that? Think about when the search stops.",
+        spoken: "What if it isn't in the list at all?",
       },
       {
         text: "When there's nothing left to search. After 7 there's nothing left, so just 5 and 7.",
         grok: verdicts([]),
-        spoken: "Ooh, nice. You found where it stops.",
+        spoken: [
+          "Mm. You just got when it stops.",
+          "My friend set lo equal to mid, not mid plus one. Is that okay?",
+        ],
       },
       {
         text: "I think that's fine?",
@@ -291,6 +297,7 @@ describe("worked example through the real judgeTurn and wordMove", () => {
       {
         text: "It stays the same… so it loops forever.",
         grok: verdicts([{ conceptId: "c_15", covered: "it loops forever" }]),
+        spoken: "How many checks would a million items take?",
       },
       {
         text: "About twenty.",
@@ -300,7 +307,7 @@ describe("worked example through the real judgeTurn and wordMove", () => {
 
     // One judge reply per turn; wordMove is only called for help questions, rephrases and celebrations.
     const judgeReplies = turns.map((t) => t.grok);
-    const wordReplies = turns.flatMap((t) => (t.spoken ? [t.spoken] : []));
+    const wordReplies = turns.flatMap((t) => (t.spoken ? [t.spoken].flat() : []));
     const deps = withGrok({ judge: judgeReplies, word: wordReplies });
 
     for (const turn of turns) {
@@ -331,24 +338,28 @@ describe("worked example through the real judgeTurn and wordMove", () => {
 
     expect(log.map((r) => [r.kind, r.level, r.conceptId])).toEqual([
       ["question", "L1", "c_12"],
+      ["ack", "L1", "c_12"],
       ["question", "L0", "c_14"],
       ["question", "L2", "c_14"],
       ["celebrate", "L2", "c_14"],
       ["question", "L0", "c_15"],
       ["question", "L1", "c_15"],
+      ["ack", "L1", "c_15"],
       ["question", "L0", "c_16"],
+      ["ack", "L0", "c_16"],
       ["check_in", "L0", "c_16"],
     ]);
-    expect(log[0].line).toBe("Wait, so my pebbles have to be in order first?");
-    expect(log[1].line).toBe("Got it. Test me: 1, 3, 5, 7, 9, looking for 6. Which numbers do you check?");
-    expect(log[2].signals).toEqual(["wrongTrace", "hedging"]);
-    expect(log[2].line).toBe("Oh, why do you think that? Think about when the search stops.");
-    expect(log[3].kind).toBe("celebrate");
-    expect(log[3].line).toBe("Ooh, nice. You found where it stops.");
-    expect(log[4].line).toBe("My friend wrote lo = mid, not mid + 1. Is that okay?");
+    expect(log[0].line).toBe("Does the list have to be in order first?");
+    expect(log[1].line).toBe("Got it.");
+    expect(log[2].line).toBe("Here is one, three, five, seven, nine, looking for six. Which numbers do you check?");
+    expect(log[3].signals).toEqual(["wrongTrace", "hedging"]);
+    expect(log[3].line).toBe("What if it isn't in the list at all?");
+    expect(log[4].kind).toBe("celebrate");
+    expect(log[4].line).toBe("Mm. You just got when it stops.");
+    expect(log[5].line).toBe("My friend set lo equal to mid, not mid plus one. Is that okay?");
     expect(run.concepts.map((c) => c.state)).toEqual(["assisted", "owned", "assisted", "assisted", "owned"]);
     expect(deps.judgeCalls).toBe(turns.length);
     expect(deps.wordCalls).toBe(wordReplies.length);
-    expect(log).toHaveLength(8);
+    expect(log).toHaveLength(11);
   });
 });

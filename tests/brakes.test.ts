@@ -21,9 +21,9 @@ import {
   CHECK_IN_LINE,
   LIMIT_PROPOSAL_LINE,
   OFFER_SKIP_LINE,
-  OPENING_LINE,
   OPEN_PROMPT_LINE,
   PAUSE_LINE,
+  WAIT_LINE,
   WRAP_UP_LINE,
   celebrationLine,
   wordCount,
@@ -95,7 +95,7 @@ function manyDefs(n: number): ConceptDef[] {
     checkPrompt: `What is idea ${i + 1}?`,
     fallbackQuestions: {
       L1: `Idea ${i + 1} level one?`,
-      L2: `Slide ${i + 1} shows idea ${i + 1}. What does it say?`,
+      L2: `What about idea ${i + 1} then?`,
       L3: `Idea ${i + 1} level three?`,
       L4: `Idea ${i + 1} is simple. Can you say it back?`,
     },
@@ -111,14 +111,15 @@ describe("brake: move on", () => {
   it("skips the concept, acknowledges, and asks about the next one", () => {
     const o = turn(sessionAt("c_12"), "Let's move on");
     expect(conceptOf(o.session, "c_12")).toMatchObject({ state: "skipped", skipped: true });
-    expect(o.move).toMatchObject({ kind: "question", conceptId: "c_13" });
-    expect(o.move.line).toBe(`Okay. ${check("c_13")}`);
+    expect(o.move).toMatchObject({ kind: "ack", line: "Okay." });
+    expect(o.move.then).toMatchObject({ kind: "question", conceptId: "c_13", line: check("c_13") });
   });
 
   it("does not raise the skipped concept again this session", () => {
     let o = turn(sessionAt("c_12"), "skip this one");
     for (let i = 0; i < 6; i++) {
-      expect(o.move.conceptId === "c_12" && o.move.kind !== "wrap_up").toBe(false);
+      const about = o.move.then?.conceptId ?? o.move.conceptId;
+      expect(about === "c_12" && o.move.kind !== "wrap_up").toBe(false);
       o = turn(o.session, "hmm the thing");
     }
   });
@@ -139,15 +140,15 @@ describe("brake: move on", () => {
 describe("brake: two skips", () => {
   it("does not check in after one skip", () => {
     const o = turn(sessionAt("c_12"), "skip");
-    expect(o.move.kind).toBe("question");
+    expect(o.move.then?.kind).toBe("question");
     expect(o.session.skipCheckInAsked).toBe(false);
   });
 
   it("asks 'Keep going or wrap up?' once after the second skip", () => {
     const first = turn(sessionAt("c_12"), "skip");
     const second = turn(first.session, "let's move on");
-    expect(second.move).toMatchObject({ kind: "check_in", sessionState: "active" });
-    expect(second.move.line).toBe(`Okay. ${CHECK_IN_LINE}`);
+    expect(second.move).toMatchObject({ kind: "ack", line: "Okay." });
+    expect(second.move.then).toMatchObject({ kind: "check_in", line: CHECK_IN_LINE, sessionState: "active" });
     expect(second.session).toMatchObject({ pending: "check_in", skipCheckInAsked: true });
     // The skipped concept's follow-up question was not asked: that is the next concept's turn.
     expect(conceptOf(second.session, "c_14").moves).toBe(0);
@@ -188,8 +189,8 @@ describe("brake: two skips", () => {
     s.concepts.find((c) => c.conceptId === "c_13")!.skipped = true;
     s.concepts.find((c) => c.conceptId === "c_13")!.state = "skipped";
     const o = turn(s, "skip");
-    expect(o.move.kind).toBe("check_in");
-    expect(o.move.line).toContain(ALL_ASKED_PROPOSAL_LINE);
+    expect(o.move.then ?? o.move).toMatchObject({ kind: "check_in" });
+    expect((o.move.then ?? o.move).line).toContain(ALL_ASKED_PROPOSAL_LINE);
     expect(o.session.pending).toBe("wrap_proposal");
   });
 
@@ -241,8 +242,8 @@ describe("brake: question streak", () => {
     const o = turn(s, "They have to be sorted.", {
       judge: { covered: [{ conceptId: "c_12", quote: "They have to be sorted" }] },
     });
-    expect(o.move.kind).toBe("question");
-    expect(o.move.line).toBe(`Got it. ${check("c_13")}`);
+    expect(o.move).toMatchObject({ kind: "ack", line: "Got it." });
+    expect(o.move.then).toMatchObject({ kind: "question", line: check("c_13") });
     expect(o.session.questionStreak).toBe(1);
   });
 
@@ -288,17 +289,18 @@ describe("brake: silence", () => {
     expect(silenceStepFor(45_000)).toBe(3);
   });
 
-  it("8 s: rephrases at the same level and adds the silence signal once", () => {
+  it("first silence: a soft wait, not another question", () => {
     const s = sessionAt("c_14", { score: 0.3, levelReached: "L1", moves: 2 });
     s.lastLine = line("c_14", "L1");
     const o = processSilence(s, 1, 0)!;
-    expect(o.move).toMatchObject({ kind: "rephrase", level: "L1", conceptId: "c_14", sessionState: "active" });
-    expect(o.move.line).toBe(line("c_14", "L1"));
+    expect(o.move).toMatchObject({ kind: "wait", level: "L1", conceptId: "c_14", sessionState: "active" });
+    expect(o.move.line).toBe(WAIT_LINE);
     expect(o.signals).toEqual(["silence"]);
     expect(o.scoreAfter).toBe(0.55);
-    // Same level even though 0.55 is in the L2 band, and no ladder move used.
     expect(conceptOf(o.session, "c_14")).toMatchObject({ levelReached: "L1", moves: 2 });
     expect(o.session.silenceStep).toBe(1);
+    expect(o.session.lastMoveKind).toBe("question");
+    expect(o.session.lastLine).toBe(line("c_14", "L1"));
   });
 
   it("20 s: offers to skip, with no second silence signal", () => {
@@ -345,15 +347,15 @@ describe("brake: silence", () => {
   it("repeats a check-in or proposal without scoring it", () => {
     const second = turn(turn(sessionAt("c_12"), "skip").session, "skip");
     const o = processSilence(second.session, 1, 0)!;
-    expect(o.move).toMatchObject({ kind: "check_in", line: second.move.line });
+    expect(o.move).toMatchObject({ kind: "check_in", line: second.session.lastLine });
     expect(o.signals).toEqual([]);
     const twenty = processSilence(second.session, 2, 0)!;
     expect(twenty.move.kind).toBe("check_in");
   });
 
-  it("repeats the opening line when the student has not started", () => {
+  it("waits softly when the student has not started", () => {
     const o = processSilence(freshSession(defs), 1, 0)!;
-    expect(o.move).toMatchObject({ kind: "rephrase", line: OPENING_LINE });
+    expect(o.move).toMatchObject({ kind: "wait", line: WAIT_LINE });
     expect(o.signals).toEqual([]);
   });
 
@@ -401,7 +403,7 @@ describe("brake: silence", () => {
       judge: { covered: [{ conceptId: "c_16", quote: "About twenty" }] },
       nowMs: 9 * MIN,
     });
-    expect(o.move.line).toContain(ALL_ASKED_PROPOSAL_LINE);
+    expect((o.move.then ?? o.move).line).toContain(ALL_ASKED_PROPOSAL_LINE);
     expect(o.move.line).not.toContain(LIMIT_PROPOSAL_LINE);
     expect(o.session.pausedMs).toBe(7 * MIN);
   });
@@ -417,8 +419,8 @@ describe("brake: session length", () => {
       defs: many,
       judge: { covered: [{ conceptId: "x_6", quote: "the sixth idea" }] },
     });
-    expect(o.move).toMatchObject({ kind: "check_in", sessionState: "wrapping_up" });
-    expect(o.move.line).toBe(`Got it. ${LIMIT_PROPOSAL_LINE}`);
+    expect(o.move).toMatchObject({ kind: "ack", line: "Got it." });
+    expect(o.move.then).toMatchObject({ kind: "check_in", line: LIMIT_PROPOSAL_LINE, sessionState: "wrapping_up" });
     expect(o.session).toMatchObject({ pending: "wrap_proposal", wrapUpProposed: true });
   });
 
@@ -429,15 +431,15 @@ describe("brake: session length", () => {
       defs: many,
       judge: { covered: [{ conceptId: "x_5", quote: "the fifth idea" }] },
     });
-    expect(o.move).toMatchObject({ kind: "question", conceptId: "x_6" });
+    expect(o.move.then ?? o.move).toMatchObject({ kind: "question", conceptId: "x_6" });
   });
 
   it("proposes wrapping up at 8 minutes, not before", () => {
     const covered = { covered: [{ conceptId: "c_12", quote: "sorted" }] };
     const early = turn(sessionAt("c_12"), "It has to be sorted.", { judge: covered, nowMs: 8 * MIN - 1 });
-    expect(early.move.kind).toBe("question");
+    expect((early.move.then ?? early.move).kind).toBe("question");
     const late = turn(sessionAt("c_12"), "It has to be sorted.", { judge: covered, nowMs: 8 * MIN });
-    expect(late.move).toMatchObject({ kind: "check_in", sessionState: "wrapping_up" });
+    expect(late.move.then ?? late.move).toMatchObject({ kind: "check_in", sessionState: "wrapping_up" });
   });
 
   it("does not cut in mid-ladder", () => {
@@ -453,7 +455,7 @@ describe("brake: session length", () => {
       judge: { covered: [{ conceptId: "c_12", quote: "sorted" }] },
       nowMs: 9 * MIN,
     });
-    expect(proposed.move.kind).toBe("check_in");
+    expect((proposed.move.then ?? proposed.move).kind).toBe("check_in");
     const keep = turn(proposed.session, "keep going", { nowMs: 9 * MIN + 5_000 });
     expect(keep.move).toMatchObject({ kind: "question", conceptId: "c_13" });
     // Not scored: a reply to the proposal is not an answer about a concept.
@@ -462,8 +464,8 @@ describe("brake: session length", () => {
       judge: { covered: [{ conceptId: "c_13", quote: "the middle" }] },
       nowMs: 10 * MIN,
     });
-    expect(next.move.kind).toBe("question");
-    expect(next.move.line).not.toContain("wrap up");
+    expect((next.move.then ?? next.move).kind).toBe("question");
+    expect((next.move.then ?? next.move).line).not.toContain("wrap up");
   });
 
   it("closes when the student agrees", () => {
@@ -501,8 +503,8 @@ describe("brake: session length", () => {
     const s = sessionAt("c_16");
     finish(s, ["c_12", "c_13", "c_14", "c_15"]);
     const o = turn(s, "About twenty.", { judge: { covered: [{ conceptId: "c_16", quote: "About twenty" }] } });
-    expect(o.move).toMatchObject({ kind: "check_in", sessionState: "wrapping_up" });
-    expect(o.move.line).toContain(ALL_ASKED_PROPOSAL_LINE);
+    expect(o.move.then ?? o.move).toMatchObject({ kind: "check_in", sessionState: "wrapping_up" });
+    expect((o.move.then ?? o.move).line).toContain(ALL_ASKED_PROPOSAL_LINE);
   });
 
   it("closes without asking again when the student turned it down and nothing is left", () => {
@@ -558,7 +560,7 @@ describe("celebration", () => {
       judge: { covered: [{ conceptId: "c_14", quote: "just 5 and 7" }] },
     });
     expect(o.move).toMatchObject({ kind: "celebrate", conceptId: "c_14", sessionState: "active" });
-    expect(o.move.line).toBe("Ooh, nice. You got when it stops.");
+    expect(o.move.line).toBe("Mm. You just got when it stops.");
     expect(o.move.then).toMatchObject({ kind: "question", level: "L0", conceptId: "c_15", line: check("c_15") });
     expect(conceptOf(o.session, "c_14").celebrated).toBe(true);
     // The server has asked the follow-up already.
@@ -581,7 +583,7 @@ describe("celebration", () => {
       judge: { covered: [{ conceptId: "c_15", quote: "it has to be mid plus one" }] },
     });
     expect(o.move).toMatchObject({ kind: "celebrate", conceptId: "c_15" });
-    expect(o.move.line).toBe("Ooh, you caught the mistake in the update step.");
+    expect(o.move.line).toBe("Mm. You caught that about the update step yourself.");
     expect(o.move.then).toMatchObject({ conceptId: "c_16" });
   });
 
@@ -589,17 +591,16 @@ describe("celebration", () => {
     const s = sessionAt("c_15", { score: 0.3, levelReached: "L1", moves: 2 });
     finish(s, ["c_12", "c_13", "c_14"]);
     const o = turn(s, "It loops forever.", { judge: { covered: [{ conceptId: "c_15", quote: "loops forever" }] } });
-    expect(o.move.kind).toBe("question");
-    expect(o.move.line).toBe(`Got it. ${check("c_16")}`);
+    expect(o.move).toMatchObject({ kind: "ack", line: "Got it." });
+    expect(o.move.then).toMatchObject({ kind: "question", line: check("c_16") });
   });
 
   it("only acknowledges a correct, unaided answer with no struggle", () => {
     const o = turn(sessionAt("c_12"), "It has to be sorted.", {
       judge: { covered: [{ conceptId: "c_12", quote: "sorted" }] },
     });
-    expect(o.move.kind).toBe("question");
-    expect(o.move.then).toBeUndefined();
-    expect(o.move.line).toBe(`${ACK_LINE} ${check("c_13")}`);
+    expect(o.move).toMatchObject({ kind: "ack", line: ACK_LINE });
+    expect(o.move.then).toMatchObject({ kind: "question", line: check("c_13") });
     expect(conceptOf(o.session, "c_12").celebrated).toBe(false);
   });
 
@@ -609,9 +610,8 @@ describe("celebration", () => {
       judge: { covered: [{ conceptId: "c_12", quote: "needs to be sorted" }] },
     });
     expect(conceptOf(o.session, "c_12").state).toBe("explained_to");
-    expect(o.move.kind).toBe("question");
-    expect(o.move.then).toBeUndefined();
-    expect(o.move.line).toBe(`${ACK_AFTER_EXPLAIN_LINE} ${check("c_13")}`);
+    expect(o.move).toMatchObject({ kind: "ack", line: ACK_AFTER_EXPLAIN_LINE });
+    expect(o.move.then).toMatchObject({ kind: "question", line: check("c_13") });
     expect(conceptOf(o.session, "c_12").celebrated).toBe(false);
   });
 
@@ -669,7 +669,7 @@ describe("celebration", () => {
     const long = "A very long concept name that goes on and on about many different matters at great length indeed";
     expectSpokenRules(celebrationLine(long, false));
     expectSpokenRules(celebrationLine(long, true));
-    expect(celebrationLine(long, false)).toBe("Ooh, nice. You got that one.");
+    expect(celebrationLine(long, false)).toBe("Mm. You just explained it yourself.");
   });
 });
 
@@ -683,6 +683,7 @@ describe("every line the brakes speak", () => {
       ALL_ASKED_PROPOSAL_LINE,
       LIMIT_PROPOSAL_LINE,
       OFFER_SKIP_LINE,
+      WAIT_LINE,
       `Okay. ${CHECK_IN_LINE}`,
       `Got it. ${LIMIT_PROPOSAL_LINE}`,
     ]) {

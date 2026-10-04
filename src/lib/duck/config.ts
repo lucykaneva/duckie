@@ -1,7 +1,7 @@
 export const DUCK = {
   // turn-taking (section 2)
-  endOfTurnSilenceMs: 1_200,
-  unfinishedThoughtWaitMs: 3_000,
+  endOfTurnSilenceMs: 1_800,
+  unfinishedThoughtWaitMs: 4_000,
   bargeInStopMs: 300,
   // Only if /turn is still going after this. Grok's judge+wording is usually 2–4 s, so 1.5 s
   // made the duck say "Hmm, let me think" on every turn. 8 s is a stuck call, not a normal one.
@@ -59,11 +59,16 @@ export const ENGINE = {
    */
   shortTurnMaxWords: 3,
   /**
+   * "Okay, let's do that" is agreement, not an answer. A turn this short that only agrees
+   * does not score and does not climb. A longer turn is the student actually talking.
+   */
+  readyTurnMaxWords: 8,
+  /**
    * After a correct answer the duck gives one small hint and asks the student to say it back in their own words,
    * before moving on. Off = "Got it" and straight to the next question. Not used after an L4 explanation: that
    * already ended in a teach-back.
    */
-  reinforceAfterCorrect: true,
+  reinforceAfterCorrect: false,
   /**
    * Once the ladder is used up (3 moves, or the explanation has been given), a student who still asks for help or an
    * example gets this many more help moves before the duck offers to skip.
@@ -75,6 +80,16 @@ export const ENGINE = {
    */
   questionMaxWords: 15,
   questionNoMarkMaxWords: 8,
+  /**
+   * A sentence this long is its own claim. When a turn has two of these, the later one decides:
+   * a right opening does not count if the ending states something else.
+   */
+  laterClaimMinWords: 6,
+  /**
+   * Words that may follow a covered quote (a short elaboration) and still count as the same claim.
+   * More than this, and the quote is not the last thing they said.
+   */
+  coveredTailWords: 12,
 
   // Running a concept's reference code (B10). The code is written by the AI, so it runs in a locked-down child process.
   /** The script is stopped after this long (an infinite loop). */
@@ -142,6 +157,17 @@ export const VOICE = {
   requestTimeoutMs: 12_000,
   /** This many failed turns in a row and the duck stops the session instead of asking again. */
   maxFailedTurnsInARow: 3,
+  /**
+   * After the duck's samples leave the laptop, a Bluetooth speaker is still playing for about this long.
+   * Mic audio in that window is the speaker, so it is not sent and it cannot cut the line off.
+   */
+  echoTailMs: 600,
+  /** Ignore interruptions for this long after a line starts, so the speaker's attack is not the student. */
+  bargeInSettleMs: 400,
+  /** The student has to be this many times louder than the quiet room before we stop the duck. */
+  bargeInOverFloor: 6,
+  /** And at least this loud (0 to 1), so room noise cannot trip it. */
+  bargeInMicPeak: 0.18,
 };
 
 // summarizeProfile (A11): how a turn log becomes a learner profile. Tune here, never in logic.

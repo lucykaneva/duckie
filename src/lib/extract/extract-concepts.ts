@@ -30,7 +30,7 @@ export const PROMPT_EXAMPLE = {
       checkPrompt: "What comes off a stack first?",
       fallbackQuestions: {
         L1: "So if I stack three plates, I grab the bottom one first?",
-        L2: "Slide 3 talks about the order things leave. What does it say?",
+        L2: "Hmm, does it matter which one went in last?",
         L3: "Try it with A, B, C pushed in that order. Which one pops first?",
         L4: "A stack gives back the newest item first, like a pile of plates. Can you say why?",
       },
@@ -44,7 +44,7 @@ export const PROMPT_EXAMPLE = {
       checkPrompt: "I push 1, 2, 3, then pop twice. What's left?",
       fallbackQuestions: {
         L1: "What if I pop an empty stack, does it just stay empty?",
-        L2: "Slide 4 shows push and pop. What does pop remove?",
+        L2: "When I take one off, which one leaves?",
         L3: "Try it with push 7, push 8, pop. What's left?",
         L4: "Pop removes the newest item, so two pops take 3 and then 2. Can you say what remains?",
       },
@@ -70,10 +70,10 @@ Each concept has these fields:
 - "misconceptions": 0 to 3 short wrong beliefs students commonly hold about this concept, written as the wrong belief itself.
 - "checkPrompt": the one question the duck asks first. At most 15 words (aim for 8 to 12), exactly one question mark, written as the duck talking to a student. It must not contain or hint at the answer.
 - "plantsMisconception": optional. true only for kind "explain" when the "checkPrompt" states a wrong claim for the student to catch (for example "My friend says X. Is that right?") instead of asking an open question; the claim must also be listed in "misconceptions". Leave it out otherwise.
-- "fallbackQuestions": an object with four lines the duck can say, each at most 20 words (aim for 12 to 16, and count them) with exactly one question mark:
-  - "L1": a curious, naive question that tests the gap without naming it.
-  - "L2": points to the page without giving the answer. It must say "Slide N" using the same number as "slide".
-  - "L3": a tiny example with different values, then a question.
+- "fallbackQuestions": an object with four lines the duck can say, each at most 20 words (aim for 12 to 16, and count them). L3 and L4 need exactly one question mark. L1 and L2 may be a reflection with no question:
+  - "L1": a curious, naive question or a short reflection that tests the gap without naming it. No slide or page.
+  - "L2": a gentle nudge about the idea in everyday words, without giving the answer. Never say slide, page, or look at.
+  - "L3": a tiny imagined spoken example with different values, then a question. No symbols.
   - "L4": a short explanation of at most 2 sentences, ending with a question that asks the student to say it back in their own words.
 - Only for kind "trace" or "predict": "referenceCode" and "expectedAnswer".
   - "referenceCode" is the body of a self-contained JavaScript function that takes no input and RETURNS the answer. No imports, no console output, no randomness. Put the example's input values inside it.
@@ -82,7 +82,7 @@ Each concept has these fields:
 
 Rules:
 - Write 3 to 12 concepts for the whole material. Do not invent topics that the material does not cover.
-- Every line is spoken aloud: plain words, no markdown, no emoji.
+- Every line is spoken aloud: plain words, no markdown, no emoji. The student often has no screen, so never mention a slide, a page, looking at notes, or writing something down.
 - Keep the student's point of view: L1 to L3 never state the answer.`;
 
 /** The prompt text, cut at the size limit, and the highest page number it includes. */

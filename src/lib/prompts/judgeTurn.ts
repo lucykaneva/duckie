@@ -2,6 +2,7 @@
 // Code decides what the structure means (scores, levels, moves). The rule that keeps it honest:
 // any item without a quote that appears in the student's words is dropped before it leaves here.
 import { PROMPTS } from "../duck/config";
+import { claimSpans } from "../engine/signals";
 import type { ConceptForJudge, JudgeResult } from "../duck/types";
 import { findQuote } from "./quotes";
 import { AiError, chat, type FetchLike } from "./xai";
@@ -11,7 +12,15 @@ export interface JudgeInput {
   concepts: ConceptForJudge[];
   explanationTurnEnded: boolean;
   /** The duck's last line. A short reply like "that's fine" is about this, not a new explanation. */
-  duckAsked?: { conceptId: string; line: string; plantsMisconception?: boolean };
+  duckAsked?: {
+    conceptId: string;
+    line: string;
+    plantsMisconception?: boolean;
+    /** The question that stated a list, when this idea opened with one. Not a stored answer. */
+    listInQuestion?: string;
+  };
+  /** Recent duck and student lines, oldest first. Quotes still have to come from this turn. */
+  conversation?: string;
 }
 
 export interface JudgeOptions {
@@ -44,6 +53,15 @@ Rules:
 - Use only the conceptId values you are given.
 - "I'm not sure", "I don't know", "no idea" or a question is NEVER a misconception and is not agreement. Use null.
 - If you are told the duck just asked a planted wrong claim and the student agrees ("that's fine", "yes", "that should work") without correcting it, that is a misconception for that concept. Quote the student's words. A correction ("no, that loops") is covered, not a misconception.
+- If duckJustAsked contains an example, a list, or a claim, and the student's words contradict that example, misconception is their exact words. Do not write the correction. Do not assume the subject is a list or a middle unless the question is about that.
+- Earlier turns are only for understanding what was asked. Every quote is still copied from studentText, never from the earlier lines.
+- Read the turn in order. The last thing they say about a concept wins. They often start right and then talk themselves into a wrong method. If a later sentence replaces or walks back an earlier one, covered is null and misconception is a quote from that later part. Do not mark covered from an opening the ending gives up.
+- lastClaim, when present, is that later part. Judge it on its own. If it states a different or wrong idea, it wins over anything earlier in studentText.
+
+Example where the ending wins (a different topic). Student: "Plants make food from light. Actually they mostly eat soil, so the light does not matter."
+Answer: {"concepts": [
+  {"conceptId": "c_1", "covered": null, "misconception": "they mostly eat soil", "vague": null, "contradiction": null}
+]}
 
 Example (a different topic). Concepts: c_1 "Sunlight", c_2 "Chlorophyll" (known misconception: "plants eat soil"), c_3 "Stomata".
 Student: "Plants make food from light. They mostly eat soil I think, and the green stuff is somehow involved."
@@ -129,9 +147,17 @@ export function cleanJudgeResult(raw: unknown, input: JudgeInput): JudgeResult {
  * Throws AiError when Grok is unavailable, slow or returns something unusable, so the caller can
  * fall back to code-only signals. It never returns a made-up "nothing found" for a failed call.
  */
+function lastClaim(text: string): string | undefined {
+  const spans = claimSpans(text);
+  if (spans.length < 2) return undefined;
+  const last = spans[spans.length - 1];
+  return text.slice(last.start, last.end).trim();
+}
+
 export async function judgeTurn(input: JudgeInput, options: JudgeOptions = {}): Promise<JudgeResult> {
   if (!input.text.trim() || input.concepts.length === 0) return emptyResult();
 
+  const ending = lastClaim(input.text);
   const content = await chat(
     [
       { role: "system", content: SYSTEM_PROMPT },
@@ -141,15 +167,18 @@ export async function judgeTurn(input: JudgeInput, options: JudgeOptions = {}): 
           explanationTurnEnded: input.explanationTurnEnded,
           concepts: input.concepts.map(({ id, name, misconceptions }) => ({ id, name, misconceptions })),
           studentText: input.text,
+          ...(ending ? { lastClaim: ending } : {}),
           ...(input.duckAsked
             ? {
                 duckJustAsked: {
                   conceptId: input.duckAsked.conceptId,
                   line: input.duckAsked.line,
                   plantedWrongClaim: input.duckAsked.plantsMisconception === true,
+                  ...(input.duckAsked.listInQuestion ? { listInQuestion: input.duckAsked.listInQuestion } : {}),
                 },
               }
             : {}),
+          ...(input.conversation?.trim() ? { conversation: input.conversation.trim() } : {}),
         }),
       },
     ],

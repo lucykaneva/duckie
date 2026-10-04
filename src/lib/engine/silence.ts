@@ -5,10 +5,10 @@ import { isQuestionMove } from "./brakes";
 import { addSignals } from "./score";
 import type { SignalKind } from "./signals";
 import type { ConceptRun, SessionRun } from "./turn";
-import { OFFER_SKIP_LINE, PAUSE_LINE } from "./wording";
+import { OFFER_SKIP_LINE, PAUSE_LINE, WAIT_LINE } from "./wording";
 
-// The silence brakes (spec section 5): after a question, 8 s of quiet rephrases it,
-// 20 s offers to skip, 45 s pauses the session. Dev A's timers call POST /silence at each step.
+// The silence brakes: after a question, a soft wait, then an offer to skip, then a pause.
+// Never another quiz question while they think. Dev A's timers call POST /silence at each step.
 
 export type SilenceStep = 1 | 2 | 3;
 
@@ -98,8 +98,21 @@ export function processSilence(
     };
   }
 
-  // 8 s (and 20 s when there is nothing to skip): say the same thing again, same level.
-  // Dev A's wordMove phrases the rephrase differently in B11; until then the line is repeated.
+  // First silence after a content question: a soft check. Keep lastMoveKind so they are
+  // still answering that question. A check-in or wrap proposal is repeated instead.
+  if (step === 1 && session.pending === null) {
+    const move: DuckMove = {
+      kind: "wait",
+      level: focus?.levelReached ?? "L0",
+      conceptId,
+      line: WAIT_LINE,
+      sessionState,
+      concepts: progress,
+    };
+    return { session: base, move, signals, scoreAfter };
+  }
+
+  // 20 s when there is nothing to skip, or any later soft repeat: say the same thing again.
   const kind: MoveKind = last === null || isQuestionMove(last) ? "rephrase" : last;
   const move: DuckMove = {
     kind,

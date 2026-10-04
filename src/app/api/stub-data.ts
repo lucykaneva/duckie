@@ -44,7 +44,7 @@ export const STUB_OPENING_MOVE: DuckMove = {
   kind: "open",
   level: "L0",
   conceptId: STUB_CONCEPT.id,
-  line: "Hey. Walk me through this in your words. I'll learn it with you.",
+  line: "I don't really get binary search yet. How does it work?",
   sessionState: "active",
   concepts: [{ id: STUB_CONCEPT.id, state: "not_yet", score: 0 }],
 };
@@ -55,7 +55,7 @@ export const STUB_RESULTS: SessionResults = {
   confidence: 5,
   understanding: 30,
   illusionScore: 70,
-  strongestMoment: "You found where it stops.",
+  strongestMoment: "Your best bit was when it stops.",
   reviseNext: "The update step",
   concepts: [
     {
@@ -99,7 +99,7 @@ export const STUB_WRAP_UP: DuckMove = {
   kind: "wrap_up",
   level: "L0",
   conceptId: STUB_CONCEPT.id,
-  line: "You found where it stops. Revisit the update step.",
+  line: "Your best bit was when it stops. Next time we can try the update step.",
   sessionState: "wrapping_up",
   concepts: [{ id: STUB_CONCEPT.id, state: "assisted", score: 0 }],
 };

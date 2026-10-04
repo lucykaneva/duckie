@@ -15,16 +15,26 @@ import { feedbackFor } from "./celebration";
 import { chooseLevel, higherLevel, levelForScore, levelRank, stateAfterResolve } from "./ladder";
 import { addSignals, collectSignals, judgeSignals, quoteAppears } from "./score";
 import {
+  caughtPlantedMistake,
   detectAffirmative,
   detectClarification,
+  detectDontKnow,
   detectExplainRequest,
+  detectFrustration,
+  detectReady,
   detectHelpRequest,
   detectKeepGoing,
   detectMoveOn,
   detectAskingQuestion,
   detectQuestion,
   detectTextSignals,
+  detectTired,
   detectWrapUpRequest,
+  endsWithLaterClaim,
+  isOnlyReady,
+  mentionsClaim,
+  plantedAgreementQuote,
+  quoteInLaterClaim,
   tokenize,
 } from "./signals";
 import type { SignalKind } from "./signals";
@@ -36,9 +46,16 @@ import {
   ASK_AGAIN_PROPOSAL_LINE,
   CHECK_IN_LINE,
   LIMIT_PROPOSAL_LINE,
+  AFTER_FORGET_LINE,
+  AGREE_HOLD_AGAIN_LINE,
+  AGREE_HOLD_LINE,
+  lineFitsStudent,
   offerSkipLine,
-  OPENING_LINE,
+  smallerPieceLine,
+  openingLine,
+  nextInviteLine,
   OPEN_PROMPT_LINE,
+  REFLECT_LINE,
   WRAP_UP_LINE,
   celebrationLine,
   withAck,
@@ -163,9 +180,9 @@ export function freshSession(defs: ConceptDef[], startedAtMs = 0): SessionRun {
       celebrated: false,
     })),
     focusConceptId: null,
-    lastMoveKind: null,
+    lastMoveKind: "open",
     turnCount: 0,
-    lastLine: OPENING_LINE,
+    lastLine: openingLine(defs[0]?.topic),
     questionStreak: 0,
     skipCheckInAsked: false,
     wrapUpProposed: false,
@@ -177,6 +194,22 @@ export function freshSession(defs: ConceptDef[], startedAtMs = 0): SessionRun {
     silenceStep: 0,
     committed: [],
   };
+}
+
+/** A long turn only counts as explaining this idea when it actually touches the idea or the last question. */
+function onTopic(text: string, conceptName: string, checkPrompt: string, lastLine: string): boolean {
+  const topic = new Set(
+    `${conceptName} ${checkPrompt} ${lastLine}`
+      .toLowerCase()
+      .replace(/[^a-z0-9' ]+/g, " ")
+      .split(/\s+/)
+      .filter((word) => word.length > 3),
+  );
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9' ]+/g, " ")
+    .split(/\s+/)
+    .some((word) => topic.has(word));
 }
 
 /** True until the student has actually started teaching (opening + "hello" do not count). */
@@ -204,7 +237,7 @@ export function openingMove(defs: ConceptDef[]): DuckMove {
     kind: "open",
     level: "L0",
     conceptId: defs[0]?.id ?? "",
-    line: OPENING_LINE,
+    line: openingLine(defs[0]?.topic),
     sessionState: "active",
     concepts: progress(freshSession(defs).concepts),
   };
@@ -269,7 +302,7 @@ export function processTurn(
   const explanationTurnEnded = hasNotStartedTeaching(session) && taughtThisTurn(input.judge, input.answer);
 
   const focusRun = concepts.find((c) => c.conceptId === session.focusConceptId);
-  const focus = focusRun && isOpen(focusRun) ? focusRun : undefined;
+  let focus = focusRun && isOpen(focusRun) ? focusRun : undefined;
 
   // A question from the student means they need help, not that they failed. If there is an idea in focus the duck
   // gives a hint on it (asking for help is never an attempt); nothing is scored. With nothing open to help with,
@@ -316,20 +349,91 @@ export function processTurn(
   // 1. Already closing, or the student asks to wrap up.
   if (session.closing || detectWrapUpRequest(text)) return closeOutcome();
 
-  // 1b. They have not started teaching. Do not quiz; Grok replies to whatever they said.
+  // 1-tired. "I'm tired" is the session, not this one idea. Offer to stop. Do not score or skip.
+  if (detectTired(text) && !detectMoveOn(text) && !detectKeepGoing(text)) {
+    const move: DuckMove = {
+      kind: "check_in",
+      level: "L0",
+      conceptId: fallbackConceptId,
+      line: CHECK_IN_LINE,
+      sessionState: "wrapping_up",
+      concepts: progress(concepts),
+    };
+    return {
+      session: {
+        ...carried(),
+        lastMoveKind: "check_in",
+        lastLine: CHECK_IN_LINE,
+        pending: "wrap_proposal",
+        questionStreak: 0,
+      },
+      move,
+      signals: [],
+      scoreAfter: focus?.score ?? 0,
+      resolved: [],
+    };
+  }
+
+  // 1a. They have not taught anything, and they are lost, ready, or asking to be told.
+  // Start one small piece. Do not ask them to explain the whole topic again.
   if (
     hasNotStartedTeaching(session) &&
     !taughtThisTurn(input.judge, input.answer) &&
     !detectMoveOn(text) &&
-    // A "can you explain?" before they have taught anything is answered by explaining the duck's own words
-    // (wordMove, from the "open" move), not by jumping into a quiz question.
+    !detectClarification(text) &&
+    (detectDontKnow(text) || detectReady(text) || detectHelpRequest(text))
+  ) {
+    const first = concepts.find(isOpen);
+    const level: HelpLevel = detectHelpRequest(text) && !detectDontKnow(text) ? "L3" : "L1";
+    const line =
+      (first && defOf(first)?.fallbackQuestions[level]) ||
+      (first && defOf(first)?.checkPrompt) ||
+      AFTER_FORGET_LINE;
+    if (first) {
+      first.moves = 1;
+      first.levelReached = higherLevel(first.levelReached, level);
+    }
+    const move: DuckMove = {
+      kind: "question",
+      level,
+      conceptId: first?.conceptId ?? fallbackConceptId,
+      line,
+      sessionState: "active",
+      concepts: progress(concepts),
+    };
+    return {
+      session: {
+        ...carried(),
+        focusConceptId: first?.conceptId ?? fallbackConceptId,
+        lastMoveKind: "question",
+        lastLine: line,
+        pending: null,
+        questionStreak: 1,
+      },
+      move,
+      signals: [],
+      scoreAfter: 0,
+      resolved: [],
+    };
+  }
+
+  // 1b. They have not started teaching. A hello stays an invite. "I forgot" is not a hello:
+  // start the first small piece instead of asking them to walk through the whole topic again.
+  // "Through what?" is a clarification of the opening, handled below.
+  if (
+    hasNotStartedTeaching(session) &&
+    !taughtThisTurn(input.judge, input.answer) &&
+    !detectMoveOn(text) &&
+    !detectDontKnow(text) &&
+    // A "can you explain?" before they have taught is answered by explaining the duck's own words.
     (!detectHelpRequest(text) || detectClarification(text) || detectExplainRequest(text))
   ) {
+    const line = nextInviteLine(defs[0]?.topic, session.lastLine);
     const move: DuckMove = {
       kind: "open",
       level: "L0",
       conceptId: fallbackConceptId,
-      line: OPENING_LINE,
+      line,
       sessionState: "active",
       concepts: progress(concepts),
     };
@@ -337,7 +441,7 @@ export function processTurn(
       session: {
         ...carried(),
         lastMoveKind: "open",
-        lastLine: OPENING_LINE,
+        lastLine: line,
         pending: null,
         questionStreak: 0,
       },
@@ -442,6 +546,41 @@ export function processTurn(
     };
   }
 
+  // 3b. "Okay, let's do that" is not an attempt. Stay on the same idea and ask them to actually try.
+  // A plain "yes" to a planted wrong claim is an answer, and a "yes" to a skip offer is a skip.
+  const agreeingWithPlant = focus !== undefined && defOf(focus)?.plantsMisconception === true && plantedAgreementQuote(text) !== null;
+  if (
+    focus &&
+    isOpen(focus) &&
+    session.pending === null &&
+    session.lastMoveKind !== "offer_skip" &&
+    !input.answer &&
+    !agreeingWithPlant &&
+    isOnlyReady(text)
+  ) {
+    const line = session.lastLine === AGREE_HOLD_LINE ? AGREE_HOLD_AGAIN_LINE : AGREE_HOLD_LINE;
+    return {
+      session: {
+        ...carried(),
+        lastMoveKind: "rephrase",
+        lastLine: line,
+        pending: null,
+        questionStreak: 1,
+      },
+      move: {
+        kind: "rephrase",
+        level: focus.levelReached,
+        conceptId: focus.conceptId,
+        line,
+        sessionState: "active",
+        concepts: progress(concepts),
+      },
+      signals: [],
+      scoreAfter: focus.score,
+      resolved: [],
+    };
+  }
+
   // The duck asked a check-in or proposal and the student gave a short reply ("keep going", "no", "sure"):
   // that is not an answer about a concept, so nothing is scored and the duck carries on. A long reply is
   // the student explaining; it is scored as usual and counts as turning the proposal down.
@@ -471,10 +610,31 @@ export function processTurn(
     skippedNow = true;
     ack = ACK_SKIP_LINE;
   } else if (!repliedToAsk) {
-    helpRequested = focus !== undefined && (detectHelpRequest(text) || questionHelp);
+    // A number list that matches an open trace, or a named wrong belief, is what this turn is about,
+    // even if the duck had asked about something else.
+    const origin = focus;
+    if (input.answer) {
+      const answered = concepts.find((c) => c.conceptId === input.answer!.conceptId && isOpen(c));
+      if (answered) focus = answered;
+    }
+    const claim = concepts.find((c) => {
+      if (!isOpen(c) || !plantedAgreementQuote(text)) return false;
+      const misconceptions = defOf(c)?.misconceptions ?? [];
+      return misconceptions.some((m) => mentionsClaim(text, m));
+    });
+    if (claim) focus = claim;
+
+    let judge = input.judge;
+    const quote = plantedAgreementQuote(text);
+    const plantTarget = claim ?? (focus && defOf(focus)?.plantsMisconception ? focus : undefined);
+    if (quote && plantTarget && !judge.misconceptions.some((m) => m.conceptId === plantTarget.conceptId)) {
+      judge = { ...judge, misconceptions: [...judge.misconceptions, { conceptId: plantTarget.conceptId, quote }] };
+    }
+
+    helpRequested = focus !== undefined && (detectHelpRequest(text) || (questionHelp && focus === origin));
 
     // A question is scored as nothing: it is neither an answer nor a failed attempt.
-    for (const c of questionHelp ? [] : concepts) {
+    for (const c of questionHelp && focus === origin ? [] : concepts) {
       if (!isOpen(c)) continue;
       const isFocus = c === focus;
       const answer = input.answer?.conceptId === c.conceptId ? input.answer : undefined;
@@ -484,22 +644,69 @@ export function processTurn(
       // Judge signals belong to the concept the judge names.
       const signals: SignalKind[] = isFocus
         ? collectSignals(
-            { conceptId: c.conceptId, text, judge: input.judge, explanationTurnEnded, wrongTrace },
+            { conceptId: c.conceptId, text, judge, explanationTurnEnded, wrongTrace },
             config,
           )
         : [
-            ...judgeSignals(c.conceptId, text, input.judge, explanationTurnEnded),
+            ...judgeSignals(c.conceptId, text, judge, explanationTurnEnded),
             ...(wrongTrace ? (["wrongTrace"] as SignalKind[]) : []),
           ];
 
-      const covered = input.judge.covered.some(
-        (item) => item.conceptId === c.conceptId && quoteAppears(text, item.quote),
-      );
+      const covered = judge.covered.some((item) => {
+        if (item.conceptId !== c.conceptId || !quoteAppears(text, item.quote)) return false;
+        // "I can halve it" and then a different method: the opening quote is not what they landed on.
+        const after = text.slice(text.indexOf(item.quote) + item.quote.length);
+        return tokenize(after).length <= ENGINE.coveredTailWords;
+      });
+      // They named the failure ("it loops forever"). That is getting it, even if the judge missed it.
+      const caught = isFocus && defOf(c)?.plantsMisconception === true && caughtPlantedMistake(text);
+      // A stored wrong belief only counts when they actually said it. A judge quote that does not
+      // match the known claim is dropped, so a correct explanation is not marked wrong.
+      const known = defOf(c)?.misconceptions ?? [];
+      if (known.length > 0 && signals.includes("misconception")) {
+        const quotes = judge.misconceptions.filter((m) => m.conceptId === c.conceptId).map((m) => m.quote);
+        const agreedWithPlant = defOf(c)?.plantsMisconception === true && isFocus && plantedAgreementQuote(text) !== null;
+        const saidIt =
+          agreedWithPlant ||
+          known.some((m) => mentionsClaim(text, m) || quotes.some((q) => mentionsClaim(q, m)));
+        // A stored list cannot name every wrong ending. When they open one way and finish another,
+        // the later quote still counts, even if it is not one of the known claims.
+        const laterEnding = quotes.some((q) => quoteAppears(text, q) && quoteInLaterClaim(text, q));
+        if (!saidIt && !laterEnding) {
+          const dropped = signals.filter((s) => s !== "misconception");
+          signals.splice(0, signals.length, ...dropped);
+        }
+      }
+      // A wrong trace is already a signal. The judge marking that same miss is not a second one,
+      // or one wrong guess jumps straight to L3 and the answer checker stops.
+      if (wrongTrace && signals.includes("misconception")) {
+        const dropped = signals.filter((s) => s !== "misconception");
+        signals.splice(0, signals.length, ...dropped);
+      }
       const bad =
-        wrongTrace ||
-        signals.some((s) => s === "misconception" || s === "contradiction" || s === "vague");
+        !caught &&
+        (wrongTrace ||
+          signals.some((s) => s === "misconception" || s === "contradiction" || s === "vague"));
 
-      if ((covered || answer?.correct === true) && !bad) {
+      // The judge sometimes never sends a cover mark. Once the duck has already nudged this idea,
+      // a real explanation with nothing wrong in it still counts. It does not count when this
+      // turn clearly taught a different idea.
+      const taughtAnother = judge.covered.some(
+        (item) => item.conceptId !== c.conceptId && quoteAppears(text, item.quote),
+      );
+      const quietCredit =
+        isFocus &&
+        !detectQuestion(text) &&
+        onTopic(text, defOf(c)?.name ?? "", defOf(c)?.checkPrompt ?? "", session.lastLine) &&
+        levelRank(c.levelReached) >= levelRank("L2") &&
+        signals.length === 0 &&
+        !answer &&
+        !helpRequested &&
+        !taughtAnother &&
+        !endsWithLaterClaim(text) &&
+        tokenize(text).length > ENGINE.readyTurnMaxWords;
+
+      if ((covered || answer?.correct === true || caught || quietCredit) && !bad) {
         const previous = c.score;
         c.score = 0;
         c.state = stateAfterResolve(c.levelReached);
@@ -518,8 +725,10 @@ export function processTurn(
       for (const s of signals) appliedAll.add(s);
       if (isFocus) {
         focusApplied = signals;
-        // Asking for help is not an attempt.
-        if (!helpRequested) c.failedAttempts += 1;
+        // Asking for help is not an attempt. Neither is a real explanation that had nothing wrong in it.
+        const quietExplanation =
+          signals.length === 0 && !input.answer && tokenize(text).length > ENGINE.readyTurnMaxWords;
+        if (!helpRequested && !quietExplanation) c.failedAttempts += 1;
       }
     }
   }
@@ -559,7 +768,7 @@ export function processTurn(
    * L4 is exempt from the move cap (spec): a student who is stuck for good, or who asked the duck to explain,
    * has not been explained to yet, so the duck explains and asks for a teach-back before it ever offers to skip.
    */
-  const planHelp = (c: ConceptRun, requested: Level, askedForHelp = false, askedToExplain = false): PlannedMove => {
+  const planHelp = (c: ConceptRun, requested: Level, askedForHelp = false, askedToExplain = false, askedFollowUp = false): PlannedMove => {
     const capReached = c.moves >= config.maxMovesPerConcept;
     const explainFirst =
       capReached &&
@@ -591,6 +800,10 @@ export function processTurn(
     const usedUp =
       c.levelReached === "L4" ||
       (c.moves >= config.maxMovesPerConcept && level !== "L4");
+    // They just asked something. One more question on this idea, then the skip offer.
+    if ((usedUp || !line) && askedFollowUp && line && c.moves < config.maxMovesPerConcept + 1) {
+      return { kind: "rephrase", level: c.levelReached, line, concept: c, help: true, sessionState: "active" };
+    }
     if (usedUp || !line) {
       return {
         kind: "offer_skip",
@@ -634,9 +847,13 @@ export function processTurn(
     const struggling = open
       .filter((c) => c.score >= config.levels.L1)
       .sort((a, b) => b.score - a.score || orderOf.get(a.conceptId)! - orderOf.get(b.conceptId)!);
-    if (struggling.length > 0) {
-      const c = struggling[0];
-      return planHelp(c, levelFor(c, false, false));
+    // A skip is for the idea they are stuck on, not the beat after they just got a different one.
+    // Ask anything still unasked before offering to leave a capped idea behind.
+    let deferredSkip: PlannedMove | undefined;
+    for (const c of struggling) {
+      const help = planHelp(c, levelFor(c, false, false));
+      if (help.kind !== "offer_skip") return help;
+      deferredSkip ??= help;
     }
 
     const unasked = open.find((c) => c.moves === 0);
@@ -653,6 +870,8 @@ export function processTurn(
         sessionState: "active",
       };
     }
+
+    if (deferredSkip) return deferredSkip;
 
     // Nothing left to ask. The duck never carries on by itself.
     if (wrapUpProposed) {
@@ -672,14 +891,34 @@ export function processTurn(
   // 4. The ladder picks the next move.
   let planned: PlannedMove;
   let movingOn = false;
-  if (focus && isOpen(focus) && !repliedToAsk) {
-    const level = levelFor(focus, !helpRequested, helpRequested);
+  const explainedQuietly =
+    focus !== undefined &&
+    !detectQuestion(text) &&
+    focus.levelReached !== "L0" &&
+    focusApplied.length === 0 &&
+    !helpRequested &&
+    !input.answer &&
+    tokenize(text).length > ENGINE.readyTurnMaxWords;
+
+  if (focus && isOpen(focus) && !repliedToAsk && explainedQuietly) {
+    // They actually talked, and nothing was wrong. Reflect. Do not climb and do not start the next quiz.
+    planned = {
+      kind: "open",
+      level: focus.levelReached,
+      line: REFLECT_LINE,
+      conceptId: focus.conceptId,
+      help: false,
+      sessionState: "active",
+    };
+    movingOn = false;
+  } else if (focus && isOpen(focus) && !repliedToAsk) {
+    const level = levelFor(focus, !helpRequested && !explainedQuietly, helpRequested);
     // L0 means no sign of struggle: say nothing about it and move on.
     if (level === "L0") {
       planned = planNext();
       movingOn = true;
     } else {
-      planned = planHelp(focus, level, helpRequested, helpRequested && detectExplainRequest(text));
+      planned = planHelp(focus, level, helpRequested, helpRequested && detectExplainRequest(text), detectQuestion(text));
     }
   } else {
     planned = planNext();
@@ -736,13 +975,19 @@ export function processTurn(
       pending: "wrap_proposal",
       proposal: true,
     };
-  } else if (!helpRequested && mustOpenUp(session.questionStreak, planned.kind, afterResponse, config)) {
+  } else if (
+    !helpRequested &&
+    !input.answer &&
+    !detectDontKnow(text) &&
+    !detectFrustration(text) &&
+    mustOpenUp(session.questionStreak, planned.kind, afterResponse, config)
+  ) {
     // (Never when the student asked for help: bouncing "can you explain?" back as an open prompt is the worst reply.)
     planned = {
       kind: "open",
       level: focus?.levelReached ?? "L0",
       line: OPEN_PROMPT_LINE,
-      conceptId: fallbackConceptId,
+      conceptId: focus?.conceptId ?? fallbackConceptId,
       help: false,
       sessionState: "active",
     };
@@ -750,6 +995,15 @@ export function processTurn(
 
   if (planned.proposal) wrapUpProposed = true;
   const skipCheckInAsked = session.skipCheckInAsked || planned.pending === "check_in";
+
+  // Lost students hear a smaller piece in their own words, not a new scenario with numbers they never used.
+  if (
+    (detectDontKnow(text) || detectFrustration(text)) &&
+    planned.line &&
+    !lineFitsStudent(planned.line, text)
+  ) {
+    planned.line = smallerPieceLine(text);
+  }
 
   if (planned.concept) {
     planned.concept.moves += 1;
@@ -767,7 +1021,7 @@ export function processTurn(
     concepts: progress(concepts),
   });
 
-  // 6. A celebration is its own move; the planned move follows after the pause.
+  // 6. Praise is its own beat. The next question follows after a pause, so getting it is not the same breath as the next quiz.
   let move: DuckMove;
   if (celebrate) {
     const celebrateDef = defOf(celebrate.concept);
@@ -780,11 +1034,33 @@ export function processTurn(
       concepts: progress(concepts),
       then: plannedMove(undefined),
     };
+  } else if (ack && planned.line.trim() !== ack.trim()) {
+    const follow = plannedMove(undefined);
+    move = {
+      kind: "ack",
+      level: focus?.levelReached ?? "L0",
+      conceptId: focus?.conceptId ?? follow.conceptId,
+      line: ack,
+      sessionState: "active",
+      concepts: progress(concepts),
+      then: follow,
+    };
   } else {
     move = plannedMove(ack);
   }
 
   const spoken = move.then ?? move;
+  if (spoken.line.trim() === session.lastLine.trim()) {
+    const alts = [
+      planned.concept ? defOf(planned.concept)?.fallbackQuestions.L1 : undefined,
+      planned.concept ? defOf(planned.concept)?.fallbackQuestions.L2 : undefined,
+      planned.concept ? defOf(planned.concept)?.fallbackQuestions.L3 : undefined,
+      AFTER_FORGET_LINE,
+      "No rush. What's one small part of it?",
+    ];
+    const next = alts.find((alt) => alt && alt.trim() !== session.lastLine.trim());
+    if (next) spoken.line = next;
+  }
   const targetId = planned.concept?.conceptId ?? session.focusConceptId;
 
   return {

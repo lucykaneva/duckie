@@ -15,7 +15,7 @@ Talk against the real engine at `/dev/voice` (Real server, not Mock) or start fr
 
 ## How a session works
 
-1. The duck opens: *explain it to me, I'm just a duck.*
+1. The duck opens by naming the topic: *I don't really get this yet. How does it work?*
 2. A greeting or mic check is answered as a greeting. It is not "you missed sorted input."
 3. When you teach, Grok judges structure (quotes have to appear in your words). Code updates scores and the help ladder.
 4. The next line is worded from your last turn. Fallback questions are the *intent* (probe the gap), not a script to recite. Planted claims and traces (`lo = mid`, `1, 3, 5, 7, 9`) stay exact so the answer cannot leak.

@@ -258,7 +258,9 @@ describe("committing an answer", () => {
     expect(committedAnswer("5 then 7", sessionAt("c_14"), defs, answers)).toEqual({ conceptId: "c_14", correct: true });
     expect(committedAnswer("5 then 9", sessionAt("c_14"), defs, answers)).toEqual({ conceptId: "c_14", correct: false });
     expect(committedAnswer("I don't know", sessionAt("c_14"), defs, answers)).toBeUndefined();
-    expect(committedAnswer("5 then 7", sessionAt("c_12"), defs, answers)).toBeUndefined();
+    // They answered the trace while the duck was on another idea. That trace is the turn.
+    expect(committedAnswer("5 then 7", sessionAt("c_12"), defs, answers)).toEqual({ conceptId: "c_14", correct: true });
+    expect(committedAnswer("about twenty", sessionAt("c_12"), defs, answers)).toBeUndefined();
     expect(committedAnswer("5 then 7", sessionAt("c_14", { state: "assisted" }), defs, answers)).toBeUndefined();
     expect(committedAnswer("5 then 7", sessionAt("c_14", { skipped: true, state: "skipped" }), defs, answers)).toBeUndefined();
   });
@@ -299,6 +301,70 @@ describe("committing an answer", () => {
     expect(o.session.concepts.find((c) => c.conceptId === "c_14")).toMatchObject({ state: "assisted", score: 0 });
     expect(o.resolved[0].previous).toBeGreaterThanOrEqual(DUCK.earnedScore);
     expect(o.move.kind).toBe("celebrate");
+  });
+
+  it("checks a guess of 3 against the list and stays on that idea", () => {
+    const prompt = trace.checkPrompt!;
+    const first = "Okay so, I guess like we would start at 3?";
+    expect(compareAnswer(first, ANSWER)).toBe("wrong");
+    let s = sessionAt("c_14");
+    s.lastLine = prompt;
+    let o = processTurn(defs, s, {
+      text: first,
+      judge: judge(),
+      answer: committedAnswer(first, s, defs, answers),
+    });
+    expect(o.move.conceptId).toBe("c_14");
+    expect(o.move.level).toBe("L1");
+    expect(o.scoreAfter).toBe(0.3);
+    expect(o.move.line).toBe(trace.fallbackQuestions.L1);
+    expect(o.move.line).not.toMatch(/that's wrong|pebble/i);
+    expect(findLeak(o.move.line, [{ expectedAnswer: ANSWER, givenText: prompt }])).toBeNull();
+
+    s = o.session;
+    const second =
+      "We start in the middle at 3. 3, is it really the middle? Can you look at that list and see if it's the middle?";
+    expect(committedAnswer(second, s, defs, answers)).toEqual({ conceptId: "c_14", correct: false });
+    o = processTurn(defs, s, {
+      text: second,
+      judge: judge(),
+      answer: committedAnswer(second, s, defs, answers),
+    });
+    expect(o.move.conceptId).toBe("c_14");
+    expect(o.move.kind).not.toBe("celebrate");
+    expect(o.session.concepts.find((c) => c.conceptId === "c_14")?.state).toBe("not_yet");
+    expect(o.scoreAfter).toBe(0.6);
+    expect(o.move.level).toBe("L2");
+    expect(findLeak(o.move.line, [{ expectedAnswer: ANSWER, givenText: prompt }])).toBeNull();
+
+    s = o.session;
+    const third = "Okay, five. Then what do I check?";
+    expect(committedAnswer(third, s, defs, answers)).toBeUndefined();
+    o = processTurn(defs, s, {
+      text: third,
+      judge: judge(),
+      answer: committedAnswer(third, s, defs, answers),
+    });
+    expect(o.move.conceptId).toBe("c_14");
+    expect(o.move.kind).not.toBe("celebrate");
+    expect(o.move.line).not.toBe("How does it find things so fast?");
+    expect(o.move.line).not.toBe("Does binary search work on any list?");
+    expect(o.session.concepts.find((c) => c.conceptId === "c_14")?.state).toBe("not_yet");
+  });
+
+  it("does not stack a judge misconception on the same wrong guess", () => {
+    const first = "Okay so, I guess like we would start at 3?";
+    const s = sessionAt("c_14");
+    s.lastLine = trace.checkPrompt!;
+    const o = processTurn(defs, s, {
+      text: first,
+      judge: judge({ misconceptions: [{ conceptId: "c_14", quote: "we would start at 3" }] }),
+      answer: committedAnswer(first, s, defs, answers),
+    });
+    expect(o.signals).toEqual(["wrongTrace"]);
+    expect(o.scoreAfter).toBe(0.3);
+    expect(o.move.level).toBe("L1");
+    expect(o.move.conceptId).toBe("c_14");
   });
 
   it("a wrong trace on its own raises the score by 0.3", () => {
