@@ -1,6 +1,6 @@
 # Duckie
 
-A plush duck you teach out loud. The gap between how sure you felt and how much you could actually explain becomes a number: the Illusion Score.
+A rubber duck you teach out loud. The gap between how sure you felt and how much you could actually explain becomes a number: the Illusion Score.
 
 You upload your slides, say how sure you are, close the laptop, and talk. Duckie plays a curious student who is quietly holding the checklist. Most tutors explain the chapter to you. Duckie makes you do the explaining.
 
