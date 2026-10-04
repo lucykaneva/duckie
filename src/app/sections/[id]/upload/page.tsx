@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { useParams } from "next/navigation";
-import { getUploadStatus, isTooManyPagesError } from "@/lib/api";
+import { isTooManyPagesError } from "@/lib/api";
 import { uploadToSection } from "@/lib/extract/client";
 import type { Concept, ConceptKind } from "@/lib/duck/types";
 import {
@@ -84,26 +84,7 @@ export default function SectionUploadPage() {
   const [lineIndex, setLineIndex] = useState(0);
   const [reading, setReading] = useState<ReadingStatus | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
-  const [existingName, setExistingName] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!sectionId) return;
-    let cancelled = false;
-    getUploadStatus(sectionId)
-      .then((job) => {
-        if (cancelled || !job) return;
-        if (job.filename || job.documentId) {
-          setExistingName(job.filename ?? "the old file");
-        }
-      })
-      .catch(() => {
-        // A missing or failing status just means we don't show the replace note.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [sectionId]);
 
   useEffect(() => {
     if (phase !== "reading") return;
@@ -236,12 +217,6 @@ export default function SectionUploadPage() {
       <div className="mt-8">
         {picking ? (
           <>
-            {existingName ? (
-              <p className="mb-4 text-small text-ink-muted">
-                Uploading again replaces the old file
-                {existingName !== "the old file" ? ` (${existingName})` : ""}.
-              </p>
-            ) : null}
             <div
               role="button"
               tabIndex={0}
