@@ -60,6 +60,11 @@ export const ENGINE = {
    */
   reinforceAfterCorrect: true,
   /**
+   * Once the ladder is used up (3 moves, or the explanation has been given), a student who still asks for help or an
+   * example gets this many more help moves before the duck offers to skip.
+   */
+  helpRequestMovesBeyondCap: 3,
+  /**
    * A student question ("Is it log n?") means they need help. Only a short, single-sentence question counts, so a
    * long explanation that ends in "right?" is still scored as teaching. Without a question mark the cap is lower.
    */

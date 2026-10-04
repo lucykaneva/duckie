@@ -16,6 +16,8 @@ import {
   detectKeepGoing,
   detectMoveOn,
   detectAskingQuestion,
+  detectExplainRequest,
+  detectHelpRequest,
   detectQuestion,
   detectWrapUpRequest,
   plantedAgreementQuote,
@@ -272,8 +274,19 @@ async function wordAndGuard(
   // Code, not Grok, decides the student was wrong: a stated misconception, a contradiction or a wrong trace.
   const wasWrong = context.signals.some((s) => s === "misconception" || s === "contradiction" || s === "wrongTrace");
 
+  // What the student just did, found by code: asked what the duck meant, or asked for help / asked a question.
+  const asked: "clarify" | "help" | undefined = !context.studentWords.trim()
+    ? undefined
+    : detectClarification(context.studentWords)
+      ? "clarify"
+      : detectHelpRequest(context.studentWords) ||
+          detectExplainRequest(context.studentWords) ||
+          detectAskingQuestion(context.studentWords)
+        ? "help"
+        : undefined;
+
   const wordLine = async (m: DuckMove): Promise<string> => {
-    if (!isWorded(m)) return m.line;
+    if (!isWorded({ ...m, studentAsked: asked })) return m.line;
     const def = context.defs.find((d) => d.id === m.conceptId);
     const result = await deps.word({
       kind: m.kind,
@@ -287,6 +300,8 @@ async function wordAndGuard(
       situation: conversationSituation(context.defs, context.run, context.judge),
       lastDuckLine: context.run.lastLine,
       ...(wasWrong && (m.kind === "question" || m.kind === "rephrase") ? { studentWas: "wrong" as const } : {}),
+      // Before they have taught anything, "can you explain?" is about the duck's own words: explain them.
+      ...(asked && m.kind !== "celebrate" ? { studentAsked: m.kind === "open" ? ("clarify" as const) : asked } : {}),
     });
     words.push({
       source: result.source,

@@ -45,6 +45,9 @@ export const MOVE_ON_PATTERNS: RegExp[] = [
   /^(?:ok(?:ay)?[,. ]+)?(?:skip|move on|next)(?: please)?[.!]*$/,
 ];
 
+/** "You're asking me want to skip this one": a complaint about the duck, not a request to skip. */
+export const COMPLAINT_ABOUT_DUCK = /\b(?:you'?re|you are|why are you|why do you|why did you) (?:asking|offering|saying|making)\b/;
+
 /** A plain "yes": the answer to "Want to skip this one?". Whole turn only. */
 export const AFFIRMATIVE_PATTERN =
   /^(?:yes|yeah|yep|yup|sure|ok(?:ay)?|fine|please|go ahead|yes please|sure thing)[.!, ]*$/;
@@ -81,6 +84,18 @@ export const HELP_REQUEST_PATTERNS: RegExp[] = [
 ];
 
 /**
+ * Asking the duck to explain ("Can you explain it?", "I don't understand"). Narrower than a help request: a hint
+ * request ("give me a hint") stays a hint, but asking to be explained to gets the explanation once the student
+ * has already tried.
+ */
+export const EXPLAIN_REQUEST_PATTERNS: RegExp[] = [
+  /\b(?:can|could|would|will) you (?:please )?(?:just )?(?:explain|walk me through|tell me)\b/,
+  /\bplease explain\b/,
+  /\bexplain (?:it|that|this) to me\b/,
+  /\b(?:i )?(?:don'?t|do not) (?:understand|get) (?:it|this|that)\b/,
+];
+
+/**
  * "What do you mean by pebbles?", "say that again", "I don't get the question". The student is asking
  * about the duck's last line, not answering it. Never a struggle signal.
  */
@@ -95,7 +110,9 @@ export const CLARIFY_PATTERNS: RegExp[] = [
   /\bcome again\b/,
   /^(?:sorry|pardon|huh|what)[?.! ]*$/,
   // "What's a pebble?": a bare question about one or two words.
-  /^(?:and )?what(?:'s| is| are) (?:a |an |the |my )?[a-z']+(?: [a-z']+)?\??$/,
+  /^(?:and )?what(?:'s| is| are) (?:a |an |the |my )?[a-z']+(?: [a-z']+){0,3}\??$/,
+  // "I'm not sure what a sorted input is": they are asking about the duck's own words.
+  /\b(?:not sure|unsure|don'?t know|no idea|don'?t understand|confused about) what (?:an? |the )?[a-z' ]{1,30}? (?:is|means|are)\b/,
 ];
 
 /** A question the duck cannot answer: it has a question mark, or starts like one. */

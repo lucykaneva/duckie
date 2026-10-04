@@ -12,7 +12,7 @@ import {
   type TurnInput,
   type TurnOutcome,
 } from "../src/lib/engine/turn";
-import { withAck, wordCount } from "../src/lib/engine/wording";
+import { offerSkipLine, withAck, wordCount } from "../src/lib/engine/wording";
 
 // These tests cover the ladder and brakes with the plain "Got it, next question" flow (the spec's worked example).
 // The reinforce step after a correct answer has its own tests in reinforce.test.ts.
@@ -305,7 +305,8 @@ describe("the ladder in a session", () => {
     expect(seen.map((m) => m.kind)).toEqual(["question", "question", "open", "question", "question", "offer_skip"]);
     expect(seen.map((m) => m.level)).toEqual(["L1", "L2", "L2", "L3", "L4", "L4"]);
     expect(seen[4].line).toBe(line("c_12", "L4"));
-    expect(seen[5].line).toBe("Want to skip this one?");
+    expect(seen[5].line).toBe(offerSkipLine(defs.find((d) => d.id === seen[5].conceptId)?.slide));
+    expect(seen[5].line).toMatch(/slide \d+/);
     expect(stateOf(o, "c_12")).toMatchObject({ levelReached: "L4", failedAttempts: 5 });
   });
 

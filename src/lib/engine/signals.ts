@@ -3,6 +3,8 @@ import type { DuckConfig } from "../duck/config";
 import {
   AFFIRMATIVE_PATTERN,
   CLARIFY_PATTERNS,
+  COMPLAINT_ABOUT_DUCK,
+  EXPLAIN_REQUEST_PATTERNS,
   DONT_KNOW_PATTERNS,
   FILLER_WORD,
   HEDGE_PATTERNS,
@@ -77,6 +79,7 @@ export function detectHeavyFillers(text: string, config: TextSignalConfig = DUCK
 /** "Let's move on", "skip this one". Not "then you skip the left half". */
 export function detectMoveOn(text: string): boolean {
   const t = normalize(text);
+  if (COMPLAINT_ABOUT_DUCK.test(t)) return false;
   return MOVE_ON_PATTERNS.some((pattern) => pattern.test(t));
 }
 
@@ -134,6 +137,12 @@ export function detectAskingQuestion(text: string): boolean {
   if (marks > 1 || words > ENGINE.questionMaxWords) return false;
   if (marks === 1) return t.endsWith("?");
   return words <= ENGINE.questionNoMarkMaxWords;
+}
+
+/** "Can you explain it?" Asking to be explained to (not a hint request). */
+export function detectExplainRequest(text: string): boolean {
+  const t = normalize(text);
+  return EXPLAIN_REQUEST_PATTERNS.some((pattern) => pattern.test(t));
 }
 
 /** "Can you explain it?" A request for help, never a struggle signal. */

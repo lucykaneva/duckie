@@ -12,11 +12,12 @@ import type {
 } from "../duck/types";
 import { mustOpenUp, nextStreak, sessionLimit, skipCheckInDue } from "./brakes";
 import { feedbackFor } from "./celebration";
-import { chooseLevel, higherLevel, levelForScore, stateAfterResolve } from "./ladder";
+import { chooseLevel, higherLevel, levelForScore, levelRank, stateAfterResolve } from "./ladder";
 import { addSignals, collectSignals, judgeSignals, quoteAppears } from "./score";
 import {
   detectAffirmative,
   detectClarification,
+  detectExplainRequest,
   detectHelpRequest,
   detectKeepGoing,
   detectMoveOn,
@@ -35,7 +36,7 @@ import {
   ASK_AGAIN_PROPOSAL_LINE,
   CHECK_IN_LINE,
   LIMIT_PROPOSAL_LINE,
-  OFFER_SKIP_LINE,
+  offerSkipLine,
   OPENING_LINE,
   OPEN_PROMPT_LINE,
   WRAP_UP_LINE,
@@ -320,7 +321,9 @@ export function processTurn(
     hasNotStartedTeaching(session) &&
     !taughtThisTurn(input.judge, input.answer) &&
     !detectMoveOn(text) &&
-    !detectHelpRequest(text)
+    // A "can you explain?" before they have taught anything is answered by explaining the duck's own words
+    // (wordMove, from the "open" move), not by jumping into a quiz question.
+    (!detectHelpRequest(text) || detectClarification(text) || detectExplainRequest(text))
   ) {
     const move: DuckMove = {
       kind: "open",
@@ -556,7 +559,7 @@ export function processTurn(
    * L4 is exempt from the move cap (spec): a student who is stuck for good, or who asked the duck to explain,
    * has not been explained to yet, so the duck explains and asks for a teach-back before it ever offers to skip.
    */
-  const planHelp = (c: ConceptRun, requested: Level, askedForHelp = false): PlannedMove => {
+  const planHelp = (c: ConceptRun, requested: Level, askedForHelp = false, askedToExplain = false): PlannedMove => {
     const capReached = c.moves >= config.maxMovesPerConcept;
     const explainFirst =
       capReached &&
@@ -565,8 +568,26 @@ export function processTurn(
       (askedForHelp ||
         levelForScore(c.score, config) === "L4" ||
         c.failedAttempts >= config.failedAttemptsForL4);
-    const level: Level = explainFirst ? "L4" : requested;
+    // "Can you explain it?" after the student has already had a hint gets the explanation (then a teach-back),
+    // not another tiny example. A first-ever ask for help is still an L3 hint.
+    const explainNow =
+      askedToExplain &&
+      c.levelReached !== "L4" &&
+      levelRank(c.levelReached) >= levelRank("L1") &&
+      helpLine(c, "L4") !== undefined;
+    const level: Level = explainFirst || explainNow ? "L4" : requested;
     const line = helpLine(c, level);
+    // The ladder is used up, but the student is asking for an example or help: they get it a few more times
+    // (a different tiny case) before the duck offers to skip. Offering to skip to someone who asked for help is wrong.
+    const smallCase = helpLine(c, "L3");
+    if (
+      askedForHelp &&
+      smallCase !== undefined &&
+      (c.levelReached === "L4" || (capReached && level !== "L4")) &&
+      c.moves < config.maxMovesPerConcept + ENGINE.helpRequestMovesBeyondCap
+    ) {
+      return { kind: "question", level: "L3", line: smallCase, concept: c, help: true, sessionState: "active" };
+    }
     const usedUp =
       c.levelReached === "L4" ||
       (c.moves >= config.maxMovesPerConcept && level !== "L4");
@@ -574,7 +595,7 @@ export function processTurn(
       return {
         kind: "offer_skip",
         level: c.levelReached,
-        line: OFFER_SKIP_LINE,
+        line: offerSkipLine(defOf(c)?.slide),
         concept: c,
         help: false,
         sessionState: "active",
@@ -658,7 +679,7 @@ export function processTurn(
       planned = planNext();
       movingOn = true;
     } else {
-      planned = planHelp(focus, level, helpRequested);
+      planned = planHelp(focus, level, helpRequested, helpRequested && detectExplainRequest(text));
     }
   } else {
     planned = planNext();
@@ -715,7 +736,8 @@ export function processTurn(
       pending: "wrap_proposal",
       proposal: true,
     };
-  } else if (mustOpenUp(session.questionStreak, planned.kind, afterResponse, config)) {
+  } else if (!helpRequested && mustOpenUp(session.questionStreak, planned.kind, afterResponse, config)) {
+    // (Never when the student asked for help: bouncing "can you explain?" back as an open prompt is the worst reply.)
     planned = {
       kind: "open",
       level: focus?.levelReached ?? "L0",
