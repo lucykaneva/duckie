@@ -75,7 +75,7 @@ export function mockTransport(options: { turnDelayMs?: number; failTurns?: numbe
         sessionId: "mock",
         topic: input.topic,
         confidence: input.confidence,
-        move: move("open", "Ooh! Can you explain it to me? I'm just a duck."),
+        move: move("open", "Hey. Walk me through this in your words. I'll learn it with you."),
       };
     },
     async sendTurn() {
@@ -95,7 +95,7 @@ export function mockTransport(options: { turnDelayMs?: number; failTurns?: numbe
       if (turns >= 4) return move("wrap_up", "That's about all I can take. Want to wrap up?");
       return turns % 2 === 1
         ? move("question", "So I could use it on my pebbles? They're all mixed up.")
-        : move("question", "Slide 4 says something about order. What does it say?");
+        : move("question", "What has to be true for that to work?");
     },
     async sendSilence(_id, ms) {
       if (ms >= 45_000) return move("pause", "I'll be here when you're ready.", "paused");

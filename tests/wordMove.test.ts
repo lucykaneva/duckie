@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { DUCK } from "../src/lib/duck/config";
 import {
   isWorded,
   lineProblem,
@@ -77,11 +78,17 @@ describe("lineProblem", () => {
     expect(lineProblem("Why?\nHow?", ok)).toMatch(/single line/);
   });
 
-  it("makes L2 name the slide, when there is one", () => {
+  it("keeps slides out of the conversation, unless mentionSlides is switched on", () => {
     const l2 = { kind: "question", level: "L2", slide: 7 } as const;
-    expect(lineProblem("What does slide 7 say about this?", l2)).toBeNull();
-    expect(lineProblem("What do the slides say about this?", l2)).toMatch(/slide 7/);
-    expect(lineProblem("What does slide 17 say?", l2)).toMatch(/slide 7/);
+    expect(lineProblem("What does slide 7 say about this?", l2)).toMatch(/slides/);
+    expect(lineProblem("What has to be true for that to work?", l2)).toBeNull();
+    DUCK.mentionSlides = true;
+    try {
+      expect(lineProblem("What does slide 7 say about this?", l2)).toBeNull();
+      expect(lineProblem("What do the slides say about this?", l2)).toMatch(/slide 7/);
+    } finally {
+      DUCK.mentionSlides = false;
+    }
   });
 
   it("makes L4 end with exactly one question, and a celebration have none", () => {
@@ -204,8 +211,8 @@ describe("what Grok is sent", () => {
     );
     const [system, user] = grok.bodies[0].messages;
     expect(system.content).toMatch(/20 words or fewer/);
-    expect(user.content).toMatch(/name slide 4/);
-    expect(user.content).toContain("Concept: Sorted input (slide 4)");
+    expect(user.content).toMatch(/everyday words/);
+    expect(user.content).not.toContain("(slide 4)");
     expect(user.content).toContain(FALLBACK);
     expect(user.content).toContain("You look at the middle and keep halving.");
     expect(user.content).toMatch(/Intent of this move/);
@@ -245,18 +252,18 @@ describe("what Grok is sent", () => {
 
 describe("questions need a question mark", () => {
   it("turns a question that ends in a full stop into a real question", async () => {
-    const grok = fakeGrok(["What does slide 4 say about this."]);
+    const grok = fakeGrok(["What happens to the list each step."]);
     const result = await wordMoveDetailed(
       { ...BASE, level: "L2", slide: 4 },
       { fetchImpl: grok.fetchImpl },
     );
-    expect(result).toMatchObject({ line: "What does slide 4 say about this?", source: "ai" });
+    expect(result).toMatchObject({ line: "What happens to the list each step?", source: "ai" });
   });
 
   it("fixes only the last sentence, and leaves statements alone", async () => {
-    const one = fakeGrok(["Slide 4 talks about order. What does it say."]);
+    const one = fakeGrok(["The list shrinks each step. What happens to it."]);
     const fixed = await wordMoveDetailed({ ...BASE, level: "L2", slide: 4 }, { fetchImpl: one.fetchImpl });
-    expect(fixed.line).toBe("Slide 4 talks about order. What does it say?");
+    expect(fixed.line).toBe("The list shrinks each step. What happens to it?");
 
     const statement = fakeGrok(["Try it with just 2, 5, 9, looking for 9."]);
     const kept = await wordMoveDetailed({ ...BASE, level: "L3" }, { fetchImpl: statement.fetchImpl });
@@ -286,7 +293,7 @@ describe("a student without the slides", () => {
     const result = await wordMoveDetailed(input, { fetchImpl: grok.fetchImpl });
     expect(result).toMatchObject({ source: "ai", attempts: 1 });
     const user = grok.bodies[0].messages[1].content;
-    expect(user).toMatch(/do not mention slides/);
+    expect(user).toMatch(/mention slides/i);
     expect(user).not.toContain("(slide 4)");
   });
 
@@ -295,6 +302,6 @@ describe("a student without the slides", () => {
     const input = { ...BASE, level: "L2" as const, slide: 4, studentWords: "I don't have the slides." };
     const result = await wordMoveDetailed(input, { fetchImpl: grok.fetchImpl });
     expect(result).toMatchObject({ line: "How would halving treat a jumbled list?", attempts: 2 });
-    expect(grok.bodies[1].messages.at(-1)?.content).toMatch(/cannot see the slides/);
+    expect(grok.bodies[1].messages.at(-1)?.content).toMatch(/do not mention slides/);
   });
 });

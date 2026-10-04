@@ -164,7 +164,7 @@ describe("wording a reply to a wrong answer", () => {
   });
 
   it("rejects a reply with no question, and retries once", async () => {
-    expect(lineProblem("Look at slide 4 again.", { ...BASE, studentWas: "wrong", level: "L3" })).toMatch(
+    expect(lineProblem("Look at the middle again.", { ...BASE, studentWas: "wrong", level: "L3" })).toMatch(
       /why they think that/,
     );
     expect(lineProblem("Oh, why do you think that? Try 2, 5, 9.", { ...BASE, studentWas: "wrong", level: "L3" })).toBeNull();

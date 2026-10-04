@@ -291,7 +291,7 @@ export async function startSession(
         kind: "open",
         level: "L0",
         conceptId: "c_12",
-        line: "Ooh! Can you explain it to me? I'm just a duck.",
+        line: "Hey. Walk me through this in your words. I'll learn it with you.",
         sessionState: "active",
         concepts: [{ id: "c_12", state: "not_yet", score: 0 }],
       },

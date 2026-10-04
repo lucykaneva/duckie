@@ -19,6 +19,11 @@ export const DUCK = {
 
   // help ladder (section 4)
   levels: { L1: 0.25, L2: 0.45, L3: 0.6, L4: 0.8 },
+  /**
+   * The duck is a conversation, usually with no slides open. Off: it never mentions slides, and a level-2 hint is an
+   * everyday question. On: level 2 points at the slide, as in the rules spec.
+   */
+  mentionSlides: false as boolean,
   maxMovesPerConcept: 3,
   failedAttemptsForL4: 3,
 

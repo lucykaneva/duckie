@@ -103,7 +103,7 @@ describe("B15 worked example (binary search)", () => {
 
     // Spec turn 1: session opens. Not a /turn.
     const open = speak(openingMove(defs));
-    expect(open).toMatchObject({ kind: "open", level: "L0", line: "Ooh! Can you explain it to me? I'm just a duck." });
+    expect(open).toMatchObject({ kind: "open", level: "L0", line: "Hey. Walk me through this in your words. I'll learn it with you." });
     expect(open.concepts.every((c) => c.state === "not_yet" && c.score === 0)).toBe(true);
 
     let s = freshSession(defs);

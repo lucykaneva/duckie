@@ -69,7 +69,7 @@ describe("opening move", () => {
   it("opens with the spec's line and every concept Not yet", () => {
     const move = openingMove(defs);
     expect(move.kind).toBe("open");
-    expect(move.line).toBe("Ooh! Can you explain it to me? I'm just a duck.");
+    expect(move.line).toBe("Hey. Walk me through this in your words. I'll learn it with you.");
     expect(move.sessionState).toBe("active");
     expect(move.concepts).toHaveLength(5);
     expect(move.concepts.every((c) => c.state === "not_yet" && c.score === 0)).toBe(true);
@@ -306,7 +306,7 @@ describe("the ladder in a session", () => {
     expect(seen.map((m) => m.level)).toEqual(["L1", "L2", "L2", "L3", "L4", "L4"]);
     expect(seen[4].line).toBe(line("c_12", "L4"));
     expect(seen[5].line).toBe(offerSkipLine(defs.find((d) => d.id === seen[5].conceptId)?.slide));
-    expect(seen[5].line).toMatch(/slide \d+/);
+    expect(seen[5].line).toMatch(/come back/);
     expect(stateOf(o, "c_12")).toMatchObject({ levelReached: "L4", failedAttempts: 5 });
   });
 

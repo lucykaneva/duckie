@@ -4,7 +4,7 @@ import { SEED_CONCEPTS } from "../src/lib/db/seed-data";
 import { ENGINE } from "../src/lib/duck/config";
 import { emptyJudgeResult } from "../src/lib/engine/stub-judge";
 import { freshSession, processTurn, type ConceptDef, type SessionRun } from "../src/lib/engine/turn";
-import { OFFER_SKIP_LINE, offerSkipLine, wordCount } from "../src/lib/engine/wording";
+import { offerSkipLine, wordCount } from "../src/lib/engine/wording";
 
 ENGINE.reinforceAfterCorrect = false;
 
@@ -30,12 +30,13 @@ function exhausted(): SessionRun {
 }
 
 describe("the offer when the student is still stuck", () => {
-  it("names the slide to look at", () => {
+  it("offers to leave it and come back, without naming a slide", () => {
     const out = turn(exhausted(), "No?");
     const slide = defs.find((d) => d.id === "c_14")!.slide;
     expect(out.move.kind).toBe("offer_skip");
     expect(out.move.line).toBe(offerSkipLine(slide));
-    expect(out.move.line).toContain(`slide ${slide}`);
+    expect(out.move.line).not.toMatch(/slide/i);
+    expect(out.move.line).toMatch(/come back/);
   });
 
   it("follows the duck's rules: 20 words or fewer, one question", () => {
@@ -44,9 +45,9 @@ describe("the offer when the student is still stuck", () => {
     expect((line.match(/\?/g) ?? []).length).toBe(1);
   });
 
-  it("falls back to the plain offer for an idea with no slide", () => {
-    expect(offerSkipLine(undefined)).toBe(OFFER_SKIP_LINE);
-    expect(offerSkipLine(0)).toBe(OFFER_SKIP_LINE);
+  it("names the slide only when mentionSlides is on, and the idea has one", () => {
+    expect(offerSkipLine(undefined)).not.toMatch(/slide/i);
+    expect(offerSkipLine(0)).not.toMatch(/slide/i);
   });
 
   it("moves on, marked as skipped (so it is revisited), only after a plain yes", () => {

@@ -44,7 +44,7 @@ export const STUB_OPENING_MOVE: DuckMove = {
   kind: "open",
   level: "L0",
   conceptId: STUB_CONCEPT.id,
-  line: "Ooh! Can you explain it to me? I'm just a duck.",
+  line: "Hey. Walk me through this in your words. I'll learn it with you.",
   sessionState: "active",
   concepts: [{ id: STUB_CONCEPT.id, state: "not_yet", score: 0 }],
 };

@@ -95,6 +95,19 @@ export function slidesUnavailable(studentWords: string): boolean {
   return /\b(?:don'?t|do not|didn'?t|can'?t|cannot|no|without|forgot|lost)\b[^.?!]{0,30}\bslides?\b/i.test(studentWords);
 }
 
+/** The duck talks without slides: that is the normal conversation, unless mentionSlides is switched on. */
+function talkingWithoutSlides(studentWords: string): boolean {
+  return !DUCK.mentionSlides || slidesUnavailable(studentWords);
+}
+
+/** A backup line that quotes a slide cannot be spoken in a no-slides conversation. */
+function spokenFallback(input: WordMoveInput): string {
+  if (talkingWithoutSlides(input.studentWords) && /\bslides?\b/i.test(input.fallbackLine)) {
+    return `What's the tricky part of ${input.conceptName}?`;
+  }
+  return input.fallbackLine;
+}
+
 function wordsOf(text: string): string[] {
   return text
     .toLowerCase()
@@ -156,8 +169,9 @@ export function lineProblem(
   if (input.kind !== "celebrate" && input.kind !== "reinforce" && !explainingWords && input.level === "L4" && questions !== 1) {
     return "an explanation must end by asking the student to say it back, as one question";
   }
-  if (input.noSlides && /\bslides?\b/i.test(text)) {
-    return "the student said they cannot see the slides, so do not mention slides";
+  const hideSlides = !DUCK.mentionSlides || input.noSlides;
+  if (hideSlides && /\bslides?\b/i.test(text)) {
+    return "do not mention slides; talk about the idea in everyday words";
   }
   if (
     input.kind !== "celebrate" &&
@@ -165,7 +179,7 @@ export function lineProblem(
     !explainingWords &&
     input.level === "L2" &&
     input.slide !== undefined &&
-    !input.noSlides
+    !hideSlides
   ) {
     if (!new RegExp(`\\bslide\\s*${input.slide}\\b`, "i").test(text)) return `it must name slide ${input.slide}`;
   }
@@ -235,14 +249,15 @@ function tidy(raw: string): string {
 
 // ---- the prompt ---------------------------------------------------------------------------------
 
-const SYSTEM_PROMPT = `You write the one line a toy duck says out loud. The duck is curious and a little dim: it has read the slides but pretends not to understand, and the student is teaching it out loud.
+const SYSTEM_PROMPT = `You write the one line a plush duck says out loud. The duck is a warm, supportive study buddy. The student learns by explaining out loud, and the duck is learning it from them at the same time. It sounds like a kind friend in a real conversation: short, natural, encouraging, never like a quiz or a script.
 
-You are in a live conversation. Read the situation and what the student just said, then continue that conversation. The rules engine only picked the kind of move (invite, curious question, celebration). You choose words that fit THIS turn. Do not recite a quiz script or a canned line.
+You are in a live conversation. Read the situation and what the student just said, then continue THAT conversation. The rules engine only picked the kind of move. You choose words that fit this turn. Do not recite a canned line.
 
 Hard limits:
 - ${DUCK.maxDuckWords} words or fewer. At most one question mark. Normal punctuation (commas and full stops). Plain spoken English: no lists, no markdown, no emoji, and no quotation marks around the line.
-- Never state the answer to anything. Never explain anything unless the task says to.
-- Reply to the student you just heard. Reuse their words. The intent line is a backup meaning, not words to copy.
+- Never state the stored answer. Never give a full explanation unless the task says to. A small, friendly nudge is fine.
+- Reply to the student you just heard, in new words. The intent line is a backup meaning, not words to copy.
+- Do not mention slides, pages or "the slide" unless the task tells you to. The student is talking to the duck, not looking at slides.
 - Do not add facts, numbers or claims that are in neither the situation nor the student's words.
 - If a tone note about this student is given, let it change HOW you say the line (shorter and blunter, or warmer and lighter, more or less playful), not what you ask. Two students with different tone notes should hear clearly different wording.
 - Never start your line with the student's own words, and never open with yeah, yes, right, exactly or "oh right". Never confirm or praise an answer unless the task says they got it right.
@@ -252,7 +267,7 @@ Hard limits:
 Reply with the line only.`;
 
 function taskFor(input: WordMoveInput): string {
-  const noSlides = slidesUnavailable(input.studentWords);
+  const noSlides = talkingWithoutSlides(input.studentWords);
   if (input.kind === "open" && input.studentAsked !== "clarify") {
     return "Reply to what the student just said and invite them to explain the topic. If they only said hello or checked the mic, greet them back. Do not quiz a specific gap yet.";
   }
@@ -288,13 +303,13 @@ function taskFor(input: WordMoveInput): string {
   switch (input.level) {
     case "L1":
       return (
-        "Ask one naive, curious question that follows from what the student just said and tests the gap, without naming the gap or the right answer. The duck is confused, not correcting anyone." +
+        "Ask one warm, curious question that follows from what the student just said, like a friend who wants to understand, without naming the gap or the right answer. Supportive, never correcting." +
         again
       );
     case "L2":
       if (noSlides) {
         return (
-          "The student said they cannot see the slides, so do not mention slides. Instead ask one tiny, concrete question about this idea in everyday words, without giving the answer." +
+          "Ask one small, concrete question about this idea in everyday words, the way a friend would. Do not mention slides. Do not give the answer." +
           again + dontEcho
         );
       }
@@ -325,8 +340,12 @@ function userMessage(input: WordMoveInput): string {
   const lines = [
     `Task: ${taskFor(input)}`,
     `Topic: ${input.topic?.trim() || input.conceptName}`,
-    `Concept: ${input.conceptName}${input.slide !== undefined && !slidesUnavailable(input.studentWords) ? ` (slide ${input.slide})` : ""}`,
-    `Intent of this move (backup only, do not recite): ${input.fallbackLine}`,
+    `Concept: ${input.conceptName}${input.slide !== undefined && !talkingWithoutSlides(input.studentWords) ? ` (slide ${input.slide})` : ""}`,
+    `Intent of this move (backup only, do not recite): ${
+      talkingWithoutSlides(input.studentWords) && /\bslides?\b/i.test(input.fallbackLine)
+        ? `Ask about ${input.conceptName} in everyday words. Do not mention slides.`
+        : input.fallbackLine
+    }`,
   ];
   if (input.situation?.trim()) lines.push(`Situation:\n${input.situation.trim()}`);
   if (input.lastDuckLine?.trim()) lines.push(`You last said: ${clip(input.lastDuckLine, 200)}`);
@@ -342,7 +361,7 @@ function userMessage(input: WordMoveInput): string {
 // ---- the loop: try, retry once, fall back --------------------------------------------------------
 
 export async function wordMoveDetailed(input: WordMoveInput, options: WordMoveOptions = {}): Promise<WordMoveResult> {
-  if (!shouldWord(input)) return { line: input.fallbackLine, source: "fixed", attempts: 0 };
+  if (!shouldWord(input)) return { line: spokenFallback(input), source: "fixed", attempts: 0 };
 
   const now = options.now ?? Date.now;
   const started = now();
@@ -372,7 +391,7 @@ export async function wordMoveDetailed(input: WordMoveInput, options: WordMoveOp
       // Grok is down, slow or unconfigured. A second try would not help in the time we have.
       const failure = error instanceof AiError ? error.reason : "http";
       return {
-        line: input.fallbackLine,
+        line: spokenFallback(input),
         source: "fallback",
         attempts: attempt,
         problem: error instanceof Error ? error.message : String(error),
@@ -381,7 +400,7 @@ export async function wordMoveDetailed(input: WordMoveInput, options: WordMoveOp
     }
 
     const line = tidy(raw);
-    problem = lineProblem(line, { ...input, noSlides: slidesUnavailable(input.studentWords) }) ?? undefined;
+    problem = lineProblem(line, { ...input, noSlides: talkingWithoutSlides(input.studentWords) }) ?? undefined;
     if (!problem) return { line, source: "ai", attempts: attempt };
 
     // Tell Grok exactly what was wrong, once.
@@ -394,7 +413,7 @@ export async function wordMoveDetailed(input: WordMoveInput, options: WordMoveOp
     );
   }
 
-  return { line: input.fallbackLine, source: "fallback", attempts: made, problem };
+  return { line: spokenFallback(input), source: "fallback", attempts: made, problem };
 }
 
 /** The shared contract (types.ts): always resolves to a line that is safe to speak. */

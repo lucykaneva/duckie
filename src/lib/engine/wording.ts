@@ -3,7 +3,7 @@ import { DUCK } from "../duck/config";
 // Fixed lines the duck speaks until Dev A's wordMove replaces them in B11. Code decides
 // which move happens; these only fill in the words. All are 20 words or fewer with at most one question.
 
-export const OPENING_LINE = "Ooh! Can you explain it to me? I'm just a duck.";
+export const OPENING_LINE = "Hey. Walk me through this in your words. I'll learn it with you.";
 export const OFFER_SKIP_LINE = "Want to skip this one?";
 
 /**
@@ -12,9 +12,10 @@ export const OFFER_SKIP_LINE = "Want to skip this one?";
  * The 20 s silence offer keeps OFFER_SKIP_LINE.
  */
 export function offerSkipLine(slide?: number): string {
-  return slide !== undefined && slide > 0
-    ? `This one's tricky. Want to look at slide ${slide} later and move on?`
-    : OFFER_SKIP_LINE;
+  if (!DUCK.mentionSlides || slide === undefined || slide <= 0) {
+    return "This one's tricky. Want to leave it for now and come back to it?";
+  }
+  return `This one's tricky. Want to look at slide ${slide} later and move on?`;
 }
 export const ACK_LINE = "Got it.";
 /** Backup for the reinforce move (wordMove normally writes it from the student's own words). */
